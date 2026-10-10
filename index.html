@@ -1,0 +1,281 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#176b36">
+<title>ScavoFoto</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f1f4f2;color:#202720;
+font:16px Arial,sans-serif}
+header{background:#176b36;color:white;padding:18px}
+header h1{margin:0;font-size:25px}
+header p{margin:6px 0 0;font-size:13px}
+main{max-width:850px;margin:auto;padding:14px}
+.card{background:white;border-radius:12px;padding:15px;
+margin-bottom:14px;box-shadow:0 2px 8px #0001}
+h2{font-size:18px;margin:0 0 12px}
+button,.filelabel{display:inline-block;border:0;
+border-radius:8px;padding:12px 14px;margin:4px 2px;
+background:#176b36;color:white;font-size:14px;
+font-weight:bold;cursor:pointer}
+button.secondary{background:#e5eee8;color:#176b36}
+button.red{background:#b3261e}
+input[type=text],textarea{width:100%;padding:11px;
+border:1px solid #ccd5ce;border-radius:7px;margin:5px 0 12px}
+input[type=file]{display:none}
+label{font-size:13px;font-weight:bold}
+#canvas{display:block;width:100%;height:auto;
+background:#e5e8e5;border-radius:8px;touch-action:none}
+#status{font-size:13px;line-height:1.5;color:#435348}
+.small{font-size:12px;color:#5d685f;line-height:1.5}
+.actions{display:flex;flex-wrap:wrap;gap:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📍 ScavoFoto</h1>
+  <p>Rilievi fotografici di scavi e sottoservizi</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1. Dati del cantiere</h2>
+    <label for="job">Cantiere / indirizzo</label>
+    <input id="job" type="text" placeholder="Via, comune, riferimento">
+    <label for="notes">Note</label>
+    <textarea id="notes" rows="2" placeholder="Descrizione dello scavo"></textarea>
+    <label for="photo">Fotografia del cantiere</label><br>
+    <label class="filelabel" for="photo">📷 Scatta o scegli una foto</label>
+    <input id="photo" type="file" accept="image/*" capture="environment">
+  </section>
+
+  <section class="card">
+    <h2>2. Registra i punti GPS</h2>
+    <p class="small">Sul posto, acquisisci il GPS per ciascun estremo.
+    Dopo la lettura, tocca la foto nel punto corrispondente per posizionare il marcatore grafico.</p>
+    <div class="actions">
+      <button onclick="gps('start')">📍 Rileva INIZIO</button>
+      <button onclick="gps('end')">📍 Rileva FINE</button>
+    </div>
+    <p id="status" aria-live="polite">In attesa di una rilevazione GPS.</p>
+    <p id="gpsstart" class="small">Inizio: non rilevato</p>
+    <p id="gpsend" class="small">Fine: non rilevato</p>
+  </section>
+
+  <section class="card">
+    <h2>3. Disegna il percorso sulla foto</h2>
+    <p class="small">Carica una foto, poi trascina il dito per tracciare
+    la linea verde. Usa i pulsanti per inserire i marcatori.</p>
+    <div class="actions">
+      <button onclick="mode='draw'">🟢 Traccia scavo</button>
+      <button class="red" onclick="mode='start'">● Punto iniziale</button>
+      <button class="red" onclick="mode='end'">● Punto finale</button>
+      <button class="secondary" onclick="undo()">Annulla ultimo</button>
+      <button class="secondary" onclick="redraw()">Ridisegna</button>
+    </div>
+    <canvas id="canvas" width="1200" height="800"></canvas>
+    <p id="modeinfo" class="small">Carica una foto per iniziare.</p>
+  </section>
+
+  <section class="card">
+    <h2>4. Esporta la tavola</h2>
+    <p class="small">L'immagine esportata include foto, percorso,
+    marcatori, coordinate, data, intestazione e legenda.</p>
+    <button onclick="exportJpg()">⬇ Salva tavola JPG</button>
+    <button class="secondary" onclick="clearAll()">Nuovo rilievo</button>
+    <p class="small">Conserva l'originale della foto. Verifica sempre
+    le coordinate e il risultato prima di consegnare la tavola.</p>
+  </section>
+</main>
+
+<script>
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+let img=null, mode='draw', strokes=[], current=null;
+let marks={start:null,end:null};
+let gpsData={start:null,end:null};
+let background=null;
+
+function say(s){
+ document.getElementById('status').textContent=s;
+}
+function gps(which){
+ if(!navigator.geolocation){
+  say('Geolocalizzazione non disponibile in questo browser.');
+  return;
+ }
+ say('Acquisizione GPS in corso…');
+ navigator.geolocation.getCurrentPosition(pos=>{
+  const p=pos.coords;
+  gpsData[which]={
+   lat:p.latitude,lon:p.longitude,accuracy:p.accuracy
+  };
+  document.getElementById('gps'+which).textContent=
+   (which==='start'?'Inizio: ':'Fine: ')+
+   p.latitude.toFixed(6)+', '+p.longitude.toFixed(6)+
+   ' | precisione stimata ±'+Math.round(p.accuracy)+' m';
+  say('GPS acquisito. Ora scegli il marcatore e tocca il punto sulla foto.');
+ },err=>{
+  const messages={
+   1:'Permesso GPS negato. Abilita la posizione nel browser.',
+   2:'Posizione non disponibile. Prova all’aperto.',
+   3:'Tempo scaduto. Riprova.'
+  };
+  say(messages[err.code]||'Errore GPS. Riprova.');
+ },{enableHighAccuracy:true,timeout:30000,maximumAge:0});
+}
+
+document.getElementById('photo').addEventListener('change',e=>{
+ const file=e.target.files[0];
+ if(!file)return;
+ const url=URL.createObjectURL(file);
+ const im=new Image();
+ im.onload=()=>{
+  img=im;
+  background=file;
+  strokes=[];marks={start:null,end:null};
+  const scale=Math.min(1600/im.width,1600/im.height,1);
+  canvas.width=Math.round(im.width*scale);
+  canvas.height=Math.round(im.height*scale);
+  redraw();
+  document.getElementById('modeinfo').textContent=
+   'Foto caricata. Seleziona un’azione e tocca o trascina sulla foto.';
+  URL.revokeObjectURL(url);
+ };
+ im.src=url;
+});
+
+function drawBase(c){
+ if(!img)return;
+ c.drawImage(img,0,0,canvas.width,canvas.height);
+}
+function paint(c){
+ if(!img){
+  c.fillStyle='#e5e8e5';c.fillRect(0,0,c.canvas.width,c.canvas.height);
+  c.fillStyle='#46564a';c.font='24px Arial';
+  c.fillText('Carica una fotografia per iniziare',35,65);
+  return;
+ }
+ drawBase(c);
+ for(const s of strokes){
+  if(s.length<2)continue;
+  c.beginPath();c.moveTo(s[0].x,s[0].y);
+  for(let i=1;i<s.length;i++)c.lineTo(s[i].x,s[i].y);
+  c.strokeStyle='#00e64d';c.lineWidth=Math.max(5,canvas.width/180);
+  c.lineCap='round';c.lineJoin='round';c.stroke();
+ }
+ for(const k of ['start','end']){
+  const m=marks[k];
+  if(!m)continue;
+  const r=Math.max(10,canvas.width/65);
+  c.beginPath();c.arc(m.x,m.y,r,0,Math.PI*2);
+  c.fillStyle='#e21b23';c.fill();
+  c.strokeStyle='white';c.lineWidth=3;c.stroke();
+  c.fillStyle='white';c.font='bold '+Math.max(12,canvas.width/90)+'px Arial';
+  c.textAlign='center';c.textBaseline='middle';
+  c.fillText(k==='start'?'I':'F',m.x,m.y);
+  const g=gpsData[k];
+  if(g){
+   const text=g.lat.toFixed(6)+', '+g.lon.toFixed(6);
+   c.font='bold '+Math.max(13,canvas.width/95)+'px Arial';
+   const tw=c.measureText(text).width;
+   const bx=Math.max(3,Math.min(m.x-r,canvas.width-tw-18));
+   const by=Math.max(3,m.y-r-Math.max(35,canvas.width/30));
+   c.fillStyle='rgba(255,255,255,.94)';
+   c.fillRect(bx,by,tw+14,Math.max(30,canvas.width/35));
+   c.fillStyle='#b71c1c';c.textAlign='left';
+   c.fillText(text,bx+7,by+Math.max(15,canvas.width/70));
+  }
+ }
+ c.textAlign='left';c.textBaseline='alphabetic';
+}
+function redraw(){paint(ctx);}
+function point(e){
+ const r=canvas.getBoundingClientRect();
+ return {
+  x:(e.clientX-r.left)*canvas.width/r.width,
+  y:(e.clientY-r.top)*canvas.height/r.height
+ };
+}
+let drawing=false;
+canvas.addEventListener('pointerdown',e=>{
+ if(!img)return;
+ e.preventDefault();
+ canvas.setPointerCapture(e.pointerId);
+ const p=point(e);
+ if(mode==='start'||mode==='end'){
+  marks[mode]=p;redraw();
+  document.getElementById('modeinfo').textContent=
+   'Marcatore '+(mode==='start'?'iniziale':'finale')+' posizionato.';
+  return;
+ }
+ drawing=true;current=[p];strokes.push(current);redraw();
+});
+canvas.addEventListener('pointermove',e=>{
+ if(!drawing||!current)return;
+ e.preventDefault();current.push(point(e));redraw();
+});
+function stopDraw(){drawing=false;current=null;}
+canvas.addEventListener('pointerup',stopDraw);
+canvas.addEventListener('pointercancel',stopDraw);
+
+function undo(){
+ if(strokes.length)strokes.pop();
+ redraw();
+}
+function clearAll(){
+ if(!confirm('Vuoi iniziare un nuovo rilievo? I dati non salvati andranno persi.'))return;
+ img=null;strokes=[];current=null;marks={start:null,end:null};
+ gpsData={start:null,end:null};background=null;
+ document.getElementById('photo').value='';
+ document.getElementById('job').value='';
+ document.getElementById('notes').value='';
+ document.getElementById('gpsstart').textContent='Inizio: non rilevato';
+ document.getElementById('gpsend').textContent='Fine: non rilevato';
+ say('Nuovo rilievo pronto.');
+ redraw();
+}
+function exportJpg(){
+ if(!img){alert('Carica prima una foto.');return;}
+ const scale=2;
+ const w=canvas.width*scale,h=canvas.height*scale;
+ const out=document.createElement('canvas');
+ out.width=w;out.height=h+190*scale;
+ const c=out.getContext('2d');
+ c.fillStyle='white';c.fillRect(0,0,out.width,out.height);
+ c.save();c.scale(scale,scale);
+ const temp=document.createElement('canvas');
+ temp.width=canvas.width;temp.height=canvas.height;
+ paint(temp.getContext('2d'));
+ c.drawImage(temp,0,0);
+ let y=canvas.height+28;
+ c.fillStyle='#176b36';c.fillRect(0,canvas.height,w/scale,5);
+ c.fillStyle='#176b36';c.font='bold 24px Arial';
+ c.fillText('TAVOLA FOTOGRAFICA SCAVO',16,y);y+=30;
+ c.fillStyle='#222';c.font='16px Arial';
+ const job=document.getElementById('job').value||'Cantiere non specificato';
+ c.fillText('Cantiere: '+job.slice(0,100),16,y);y+=25;
+ c.font='14px Arial';
+ c.fillText('Data: '+new Date().toLocaleString('it-IT'),16,y);y+=23;
+ for(const k of ['start','end']){
+  const g=gpsData[k];
+  const label=k==='start'?'INIZIO':'FINE';
+  c.fillText(label+': '+(g?g.lat.toFixed(6)+', '+g.lon.toFixed(6)+' (precisione ±'+Math.round(g.accuracy)+' m)':'GPS non rilevato'),16,y);
+  y+=21;
+ }
+ c.fillText('Legenda: linea verde = percorso scavo | rosso I = inizio | rosso F = fine',16,y);
+ y+=21;
+ const notes=document.getElementById('notes').value;
+ if(notes)c.fillText('Note: '+notes.slice(0,130),16,y);
+ c.restore();
+ const a=document.createElement('a');
+ a.download='ScavoFoto_'+new Date().toISOString().slice(0,10)+'.jpg';
+ a.href=out.toDataURL('image/jpeg',.94);
+ a.click();
+}
+redraw();
+</script>
+</body>
+</html>
