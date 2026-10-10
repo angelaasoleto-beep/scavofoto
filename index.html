@@ -45,8 +45,12 @@ button.red{background:#d93648}
 <label for="notes">Note sullo scavo</label>
 <textarea id="notes" rows="3" placeholder="Descrizione dello scavo"></textarea>
 <label for="photo">Fotografia</label>
-<input id="photo" type="file" accept="image/*">
-<label class="filelabel" for="photo">📷 Scatta una foto o scegli dalla galleria</label>
+<input id="photoCamera" type="file" accept="image/*" capture="environment">
+<input id="photoGallery" type="file" accept="image/*">
+<div class="actions">
+  <label class="filelabel" for="photoCamera">📷 Scatta una foto</label>
+  <label class="filelabel" for="photoGallery">🖼️ Scegli dalla galleria</label>
+</div>
 <p id="photoStatus" class="small">Nessuna foto caricata.</p>
 </section>
 
@@ -54,11 +58,10 @@ button.red{background:#d93648}
 <h2>2. Registrazione GPS</h2>
 <div class="actions">
 <button onclick="gps('start')">📍 Rileva INIZIO</button>
-<button onclick="gps('end')">📍 Rileva FINE</button>
 </div>
 <p id="status" role="status">Pronto per la rilevazione.</p>
 <div class="info"><strong>COORDINATE INIZIALI</strong><span id="gpsstart">Non rilevate</span></div>
-<div class="info"><strong>COORDINATE FINALI</strong><span id="gpsend">Non rilevate</span></div>
+
 </section>
 
 <section class="card">
@@ -81,12 +84,15 @@ button.red{background:#d93648}
 <div class="info"><strong>DATA E ORA</strong><span id="previewDate">—</span></div>
 <div class="info"><strong>PERCORSO</strong><span id="previewPath">Nessun tracciato</span></div>
 <div class="info"><strong>PUNTO INIZIALE</strong><span id="previewStart">Non rilevato</span></div>
-<div class="info"><strong>PUNTO FINALE</strong><span id="previewEnd">Non rilevato</span></div>
+<div class="info"><strong>PUNTO FINALE</strong><span id="previewEnd">Da posizionare manualmente sulla foto</span></div>
 <div class="info"><strong>NOTE</strong><span id="previewNotes">Nessuna nota</span></div>
 </section>
 
 <section class="card">
 <h2>5. Esportazione</h2>
+<label for="tableName">Nome della tavola</label>
+<input id="tableName" type="text" placeholder="Es. Scavo_Via_Roma_01" value="ScavoFoto">
+<p class="small">Il nome verrà usato per il file JPG salvato.</p>
 <button onclick="exportJpg()">⬇ Salva tavola JPG</button>
 <button class="secondary" onclick="clearAll()">Nuovo rilievo</button>
 </section>
@@ -98,7 +104,7 @@ const canvas=document.getElementById('canvas');
 const ctx=canvas.getContext('2d');
 let img=null,mode='draw',strokes=[],current=null;
 let marks={start:null,end:null};
-let gpsData={start:null,end:null};
+let gpsData={start:null};
 let drawing=false,captureDate=null,gpsRequest=0;
 
 function say(s){document.getElementById('status').textContent=s}
@@ -118,12 +124,11 @@ function formatCoord(g){
 
 function updateInfo(){
  document.getElementById('gpsstart').textContent=formatCoord(gpsData.start);
- document.getElementById('gpsend').textContent=formatCoord(gpsData.end);
  document.getElementById('previewJob').textContent=document.getElementById('job').value.trim()||'Non specificato';
  document.getElementById('previewNotes').textContent=document.getElementById('notes').value.trim()||'Nessuna nota';
  document.getElementById('previewDate').textContent=captureDate?captureDate.toLocaleString('it-IT'):'—';
  document.getElementById('previewStart').textContent=formatCoord(gpsData.start);
- document.getElementById('previewEnd').textContent=formatCoord(gpsData.end);
+ document.getElementById('previewEnd').textContent=marks.end?'Posizione manuale sulla fotografia':'Da posizionare manualmente sulla foto';
  document.getElementById('previewPath').textContent=strokes.length?'Tracciato disegnato':'Nessun tracciato';
 }
 
@@ -145,7 +150,7 @@ function gps(which){
  },{enableHighAccuracy:true,timeout:30000,maximumAge:0});
 }
 
-document.getElementById('photo').addEventListener('change',e=>{
+function handlePhotoChange(e){
  const file=e.target.files&&e.target.files[0];
  if(!file)return;
  if(!file.type.startsWith('image/')){say('File immagine non valido.');return}
@@ -163,7 +168,9 @@ document.getElementById('photo').addEventListener('change',e=>{
  };
  im.onerror=()=>{URL.revokeObjectURL(url);say('Impossibile aprire la foto. Prova un altro file.')};
  im.src=url;
-});
+}
+document.getElementById('photoCamera').addEventListener('change',handlePhotoChange);
+document.getElementById('photoGallery').addEventListener('change',handlePhotoChange);
 
 function paint(c){
  const w=c.canvas.width,h=c.canvas.height;
@@ -239,6 +246,18 @@ function resetDrawing(){
 document.getElementById('job').addEventListener('input',updateInfo);
 document.getElementById('notes').addEventListener('input',updateInfo);
 
+// Attenua solo le piccole oscillazioni tra punti vicini; mantiene estremi e curve.
+function smoothStroke(points){
+  if(points.length<4)return points;
+  const out=[points[0]];
+  for(let i=1;i<points.length-1;i++){
+    const a=points[i-1],b=points[i],d=points[i+1];
+    out.push({x:a.x*0.2+b.x*0.6+d.x*0.2,y:a.y*0.2+b.y*0.6+d.y*0.2});
+  }
+  out.push(points[points.length-1]);
+  return out;
+}
+
 function exportJpg(){
   if(!img){say('Carica prima una foto.');return}
   try{
@@ -279,8 +298,9 @@ function exportJpg(){
     // Tracciato: contorno bianco e linea verde
     for(const stroke of strokes){
       if(stroke.length<2) continue;
-      c.beginPath(); c.moveTo(X(stroke[0]),Y(stroke[0]));
-      for(let i=1;i<stroke.length;i++) c.lineTo(X(stroke[i]),Y(stroke[i]));
+      const cleanStroke=smoothStroke(stroke);
+      c.beginPath(); c.moveTo(X(cleanStroke[0]),Y(cleanStroke[0]));
+      for(let i=1;i<cleanStroke.length;i++) c.lineTo(X(cleanStroke[i]),Y(cleanStroke[i]));
       c.lineCap='butt'; c.lineJoin='miter';
       c.strokeStyle='#fff'; c.lineWidth=15; c.stroke();
       c.strokeStyle='#00a51c'; c.lineWidth=8; c.stroke();
@@ -291,7 +311,7 @@ function exportJpg(){
       return g.toFixed ? g.toFixed(5).replace('.',',') : '';
     }
     function callout(key,title){
-      const p=marks[key], g=gpsData[key];
+      const p=marks[key], g=key==='start'?gpsData.start:null;
       if(!p) return;
       const px=X(p), py=Y(p);
       const boxW=195, boxH=61;
@@ -305,8 +325,12 @@ function exportJpg(){
       c.fillStyle='#fff'; c.font='bold 15px Arial'; c.textAlign='left';
       c.fillText(title,bx+10,by+16);
       c.fillStyle='#111'; c.font='bold 13px Arial';
-      c.fillText('Latitudine: '+(g?coord(g.lat)+'° N':'Non rilevata'),bx+10,by+40);
-      c.fillText('Longitudine: '+(g?coord(g.lon)+'° E':'Non rilevata'),bx+10,by+55);
+      if(key==='start'){
+        c.fillText('Latitudine: '+(g?coord(g.lat)+'° N':'Non rilevata'),bx+10,by+40);
+        c.fillText('Longitudine: '+(g?coord(g.lon)+'° E':'Non rilevata'),bx+10,by+55);
+      }else{
+        c.fillText('Posizione manuale',bx+10,by+43);
+      }
       const ax=Math.max(bx+12,Math.min(px,bx+boxW-12));
       const ay=py<by?by:by+boxH;
       c.strokeStyle='#ff1717'; c.lineWidth=3;
@@ -357,7 +381,7 @@ function exportJpg(){
       c.lineWidth=1; c.strokeStyle='#555'; c.stroke();
     }
     legendDot(top+49); c.fillStyle='#111'; c.fillText('Inizio scavo (coordinate GPS)',131,top+54);
-    legendDot(top+76); c.fillText('Fine scavo (coordinate GPS)',131,top+81);
+    legendDot(top+76); c.fillText('Fine scavo (posizione manuale)',131,top+81);
 
     // Coordinate GPS
     c.font='bold 21px Arial'; c.fillStyle='#111111';
@@ -371,7 +395,6 @@ function exportJpg(){
       c.fillText(value,585,y);
     }
     coordinateRow('Inizio scavo:',gpsData.start,top+36);
-    coordinateRow('Fine scavo:',gpsData.end,top+70);
 
     // Note con testo a capo
     c.font='bold 21px Arial'; c.fillStyle='#111111'; c.fillText('NOTE',941,top); c.fillRect(941,top+8,68,3);
@@ -390,7 +413,9 @@ function exportJpg(){
     if(line && yy<=H-8) c.fillText(line,941,yy);
 
     const a=document.createElement('a');
-    a.download='ScavoFoto_'+new Date().toISOString().slice(0,10)+'.jpg';
+    const requestedName=document.getElementById('tableName').value.trim()||'ScavoFoto';
+    const safeName=requestedName.replace(/[\\\\/:*?"<>|]+/g,'_').replace(/\\s+/g,'_');
+    a.download=safeName.toLowerCase().endsWith('.jpg')?safeName:safeName+'.jpg';
     a.href=out.toDataURL('image/jpeg',0.96);
     a.click();
     say('Tavola JPG creata.');
@@ -403,9 +428,10 @@ function exportJpg(){
 function clearAll(){
  if(!confirm('Vuoi iniziare un nuovo rilievo?'))return;
  gpsRequest++;img=null;strokes=[];current=null;
- marks={start:null,end:null};gpsData={start:null,end:null};
+ marks={start:null,end:null};gpsData={start:null};
  captureDate=null;drawing=false;
- document.getElementById('photo').value='';
+  document.getElementById('photoCamera').value='';
+  document.getElementById('photoGallery').value='';
  document.getElementById('job').value='';
  document.getElementById('notes').value='';
  document.getElementById('photoStatus').textContent='Nessuna foto caricata.';
