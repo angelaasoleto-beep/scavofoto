@@ -38,10 +38,31 @@ button.red{background:#d93648}
 <p class="credit">Sviluppato da Angela in collaborazione con Giuseppe</p>
 </header>
 <main>
+<section class="card" id="homeMenu">
+<h2>Scegli la funzione</h2>
+<button onclick="openSection('requestApp')">📋 Richiesta scavo</button>
+<button onclick="openSection('liveApp')">📸 Scavo Live</button>
+</section>
+<section id="liveApp" hidden>
+<section class="card"><h2>Scavo Live — dati cantiere</h2>
+<label for="liveOrder">Codice ordine</label><input id="liveOrder" type="text" placeholder="Inserisci il codice ordine">
+<label for="liveAddress">Indirizzo</label><input id="liveAddress" type="text" placeholder="Via, numero civico, comune">
+<label for="liveDate">Data lavorazione</label><input id="liveDate" type="date">
+<p class="small">Ogni foto deve essere associata alla posizione GPS rilevata quando viene caricata.</p>
+</section>
+<section class="card"><h2>Foto obbligatorie</h2><p class="small">Carica le foto nell’ordine indicato. Per ogni foto puoi scattare oppure scegliere dalla galleria.</p>
+<div id="livePhotoFields"></div>
+</section>
+<section class="card"><h2>Foto aggiuntive (facoltative)</h2><input id="extraLivePhotos" type="file" accept="image/*" multiple><button onclick="document.getElementById('extraLivePhotos').click()">Aggiungi foto</button><div id="extraLiveList" class="small"></div></section>
+<section class="card"><button onclick="makeLivePdf()">📄 Crea PDF Scavo Live</button><button class="secondary" onclick="backHome()">Torna alla scelta</button><p id="liveStatus" class="small" role="status"></p></section>
+</section>
+<div id="requestApp" hidden>
 <section class="card">
 <h2>1. Dati del cantiere</h2>
 <label for="job">Cantiere / indirizzo</label>
 <input id="job" type="text" placeholder="Via, comune, riferimento">
+<label for="orderCode">Codice ordine</label>
+<input id="orderCode" type="text" placeholder="Inserisci il codice ordine">
 <label for="notes">Note sullo scavo</label>
 <textarea id="notes" rows="3" placeholder="Descrizione dello scavo"></textarea>
 <label for="photo">Fotografia</label>
@@ -81,6 +102,7 @@ button.red{background:#d93648}
 <section class="card">
 <h2>4. Informazioni del rilievo</h2>
 <div class="info"><strong>CANTIERE</strong><span id="previewJob">Non specificato</span></div>
+<div class="info"><strong>CODICE ORDINE</strong><span id="previewOrderCode">Non specificato</span></div>
 <div class="info"><strong>DATA E ORA</strong><span id="previewDate">—</span></div>
 <div class="info"><strong>PERCORSO</strong><span id="previewPath">Nessun tracciato</span></div>
 <div class="info"><strong>PUNTO INIZIALE</strong><span id="previewStart">Non rilevato</span></div>
@@ -96,10 +118,22 @@ button.red{background:#d93648}
 <button onclick="exportJpg()">⬇ Salva tavola JPG</button>
 <button class="secondary" onclick="clearAll()">Nuovo rilievo</button>
 </section>
+</div>
 </main>
-
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
 'use strict';
+function openSection(id){document.getElementById('homeMenu').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('liveApp').hidden=true;document.getElementById(id).hidden=false;if(id==='liveApp'&&!document.getElementById('liveDate').value)document.getElementById('liveDate').value=new Date().toISOString().slice(0,10)}
+function backHome(){document.getElementById('liveApp').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('homeMenu').hidden=false}
+const liveKinds=[['before','Foto prima dello scavo',true],['open','Foto scavo aperto',true],['depth','Profondità scavo (8–15 cm)',true],['finish','Fine scavo',true]];
+const livePhotos={};let extraPhotos=[];
+function buildLiveFields(){const root=document.getElementById('livePhotoFields');root.innerHTML='';liveKinds.forEach(([id,label])=>{const d=document.createElement('div');d.className='info';d.innerHTML=`<strong>${label}</strong><input type="file" accept="image/*" capture="environment" id="cam_${id}"><input type="file" accept="image/*" id="gal_${id}"><button type="button" id="btncam_${id}">📷 Scatta</button><button type="button" class="secondary" id="btngal_${id}">🖼️ Galleria</button><div id="state_${id}" class="small">Foto non caricata</div>`;d.querySelector('#btncam_'+id).onclick=()=>document.getElementById('cam_'+id).click();d.querySelector('#btngal_'+id).onclick=()=>document.getElementById('gal_'+id).click();root.appendChild(d);['cam_','gal_'].forEach(pre=>document.getElementById(pre+id).addEventListener('change',e=>{if(e.target.files[0])loadLivePhoto(id,e.target.files[0],label)}))})}
+function liveMsg(t){document.getElementById('liveStatus').textContent=t}
+async function reverseAddress(lat,lon){const r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+lat+'&lon='+lon);if(!r.ok)throw Error('Indirizzo non disponibile');const j=await r.json();if(!j.display_name)throw Error('Indirizzo non trovato');return j.display_name}
+function loadLivePhoto(id,file,label){liveMsg('Rilevo la posizione GPS…');if(!navigator.geolocation){liveMsg('GPS non disponibile su questo dispositivo.');return}navigator.geolocation.getCurrentPosition(async pos=>{try{const lat=pos.coords.latitude,lon=pos.coords.longitude;let address=await reverseAddress(lat,lon);const data=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result);fr.onerror=reject;fr.readAsDataURL(file)});const item={data,lat,lon,address,label};if(id==='extra'){extraPhotos.push(item);document.getElementById('extraLiveList').textContent=extraPhotos.length+' foto aggiuntive geolocalizzate'}else{livePhotos[id]=item;document.getElementById('state_'+id).textContent='✓ Foto caricata e geolocalizzata: '+lat.toFixed(6)+', '+lon.toFixed(6)}liveMsg('Posizione acquisita: '+address)}catch(e){liveMsg('Non sono riuscito a ricavare l’indirizzo GPS. Riprova con connessione attiva.')}},e=>liveMsg('GPS non acquisito. Attiva la posizione e autorizza il browser, poi seleziona di nuovo la foto.'),{enableHighAccuracy:true,timeout:20000,maximumAge:0})}
+document.getElementById('extraLivePhotos').addEventListener('change',e=>Array.from(e.target.files).forEach(f=>loadLivePhoto('extra',f,'Foto aggiuntiva')));
+async function makeLivePdf(){const order=document.getElementById('liveOrder').value.trim(),address=document.getElementById('liveAddress').value.trim(),date=document.getElementById('liveDate').value;if(!order||!address||!date){liveMsg('Compila codice ordine, indirizzo e data lavorazione.');return}if(liveKinds.some(([id])=>!livePhotos[id])){liveMsg('Mancano una o più foto obbligatorie.');return}if(!window.jspdf){liveMsg('Impossibile caricare il creatore PDF: controlla la connessione.');return}const {jsPDF}=window.jspdf;const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});const all=liveKinds.map(([id,label])=>({...livePhotos[id],label})).concat(extraPhotos);for(let i=0;i<all.length;i++){if(i)pdf.addPage();const ph=all[i];const props=pdf.getImageProperties(ph.data);const maxW=190,maxH=235,scale=Math.min(maxW/props.width,maxH/props.height);const w=props.width*scale,h=props.height*scale;pdf.addImage(ph.data,ph.data.startsWith('data:image/png')?'PNG':'JPEG',10,10,w,h);const y=Math.min(270,15+h);pdf.setFillColor(0,0,0);pdf.rect(8,y,194,22,'F');pdf.setTextColor(255,255,255);pdf.setFontSize(9);pdf.text(date+' | '+ph.lat.toFixed(6)+', '+ph.lon.toFixed(6),12,y+7);const lines=pdf.splitTextToSize(ph.address,184);pdf.text(lines.slice(0,2),12,y+13);pdf.setTextColor(0,0,0)}const safe=(order+'_'+address).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'');pdf.save(safe+'.pdf');liveMsg('PDF creato. Foto incluse: '+all.length)}
+buildLiveFields();
 const canvas=document.getElementById('canvas');
 const ctx=canvas.getContext('2d');
 let img=null,mode='draw',strokes=[],current=null;
@@ -125,6 +159,7 @@ function formatCoord(g){
 function updateInfo(){
  document.getElementById('gpsstart').textContent=formatCoord(gpsData.start);
  document.getElementById('previewJob').textContent=document.getElementById('job').value.trim()||'Non specificato';
+ document.getElementById('previewOrderCode').textContent=document.getElementById('orderCode').value.trim()||'Non specificato';
  document.getElementById('previewNotes').textContent=document.getElementById('notes').value.trim()||'Nessuna nota';
  document.getElementById('previewDate').textContent=captureDate?captureDate.toLocaleString('it-IT'):'—';
  document.getElementById('previewStart').textContent=formatCoord(gpsData.start);
@@ -244,6 +279,7 @@ function resetDrawing(){
 }
 
 document.getElementById('job').addEventListener('input',updateInfo);
+document.getElementById('orderCode').addEventListener('input',updateInfo);
 document.getElementById('notes').addEventListener('input',updateInfo);
 
 // Corregge il tracciato solo in esportazione: raddrizza le linee quasi dritte,
@@ -323,6 +359,10 @@ function exportJpg(){
     c.font='bold 16px Arial';
     const job=document.getElementById('job').value.trim();
     c.fillText((job||'Scavo per posa sottoservizi').slice(0,23),1020,62);
+    c.font='bold 14px Arial'; c.fillText('COD. ORDINE:',930,87);
+    c.font='14px Arial';
+    const orderCode=document.getElementById('orderCode').value.trim()||'Non specificato';
+    c.fillText(orderCode.slice(0,24),1035,87);
 
     // Fotografia di base
     c.drawImage(img,0,headerH,W,photoH);
@@ -446,7 +486,7 @@ function exportJpg(){
     if(line && yy<=H-8) c.fillText(line,941,yy);
 
     const a=document.createElement('a');
-    const requestedName=document.getElementById('tableName').value.trim()||'ScavoFoto';
+    const autoOrder=document.getElementById('orderCode').value.trim(); const autoAddress=document.getElementById('job').value.trim(); const requestedName=(autoOrder&&autoAddress?autoOrder+'_'+autoAddress:document.getElementById('tableName').value.trim())||'ScavoFoto';
     const safeName=requestedName.replace(/[\\\\/:*?"<>|]+/g,'_').replace(/\\s+/g,'_');
     a.download=safeName.toLowerCase().endsWith('.jpg')?safeName:safeName+'.jpg';
     a.href=out.toDataURL('image/jpeg',0.96);
@@ -466,6 +506,7 @@ function clearAll(){
   document.getElementById('photoCamera').value='';
   document.getElementById('photoGallery').value='';
  document.getElementById('job').value='';
+ document.getElementById('orderCode').value='';
  document.getElementById('notes').value='';
  document.getElementById('photoStatus').textContent='Nessuna foto caricata.';
  document.getElementById('modeinfo').textContent='Carica una foto per iniziare.';
