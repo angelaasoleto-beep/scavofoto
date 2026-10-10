@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0787c1">
 <title>ScavoFoto</title>
-
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f1f8fc;color:#193448;font:16px Arial,sans-serif}
 header{background:linear-gradient(135deg,#087db5,#49c3f2);color:white;padding:22px 16px}
 header h1{margin:0;font-size:28px}
 header p{margin:7px 0 0}
+header p.credit{font-size:13px;font-weight:bold;opacity:.95;margin-top:9px}
 main{max-width:900px;margin:auto;padding:14px}
 .card{background:white;border:1px solid #dcecf5;border-radius:14px;padding:17px;margin-bottom:15px;box-shadow:0 3px 12px #173e5810}
 h2{font-size:19px;color:#075985;margin:0 0 14px}
@@ -28,618 +28,392 @@ button.red{background:#d93648}
 .info{padding:12px;background:#f2f9fe;border:1px solid #dcecf5;border-radius:9px;margin-top:10px;overflow-wrap:anywhere}
 .info strong{display:block;color:#087db5;font-size:11px;margin-bottom:6px}
 .info span{font-size:14px;line-height:1.6;white-space:pre-wrap}
-@media(max-width:520px){
- main{padding:10px}
- .card{padding:14px}
- button,.filelabel{flex:1 1 auto;text-align:center}
-}
+@media(max-width:520px){main{padding:10px}.card{padding:14px}button,.filelabel{flex:1 1 auto;text-align:center}}
 </style>
 </head>
-
 <body>
 <header>
-  <h1>📍 ScavoFoto</h1>
-  <p>Rilievi fotografici di scavi e sottoservizi</p>
+<h1>📍 ScavoFoto</h1>
+<p>Rilievi fotografici di scavi e sottoservizi</p>
+<p class="credit">Sviluppato da Angela in collaborazione con Giuseppe</p>
 </header>
-
 <main>
-
 <section class="card">
-  <h2>1. Dati del cantiere</h2>
-
-  <label for="job">Cantiere / indirizzo</label>
-  <input id="job" type="text" placeholder="Via, comune, riferimento">
-
-  <label for="notes">Note sullo scavo</label>
-  <textarea id="notes" rows="3" placeholder="Descrizione dello scavo"></textarea>
-
-  <label for="photo">Fotografia</label>
-  <input id="photo" type="file" accept="image/*" capture="environment">
-  <label class="filelabel" for="photo">📷 Scatta o scegli una foto</label>
-
-  <p id="photoStatus" class="small">Nessuna foto caricata.</p>
+<h2>1. Dati del cantiere</h2>
+<label for="job">Cantiere / indirizzo</label>
+<input id="job" type="text" placeholder="Via, comune, riferimento">
+<label for="notes">Note sullo scavo</label>
+<textarea id="notes" rows="3" placeholder="Descrizione dello scavo"></textarea>
+<label for="photo">Fotografia</label>
+<input id="photo" type="file" accept="image/*">
+<label class="filelabel" for="photo">📷 Scatta una foto o scegli dalla galleria</label>
+<p id="photoStatus" class="small">Nessuna foto caricata.</p>
 </section>
 
 <section class="card">
-  <h2>2. Posizione GPS iniziale</h2>
-
-  <p class="small">
-    Rileva il GPS soltanto all'inizio dello scavo.
-    Il punto finale verrà posizionato manualmente sulla fotografia.
-  </p>
-
-  <div class="actions">
-    <button onclick="rilevaGpsInizio()">📍 Rileva GPS INIZIO</button>
-  </div>
-
-  <p id="status" role="status">Pronto per la rilevazione.</p>
-
-  <div class="info">
-    <strong>COORDINATE GPS INIZIALI</strong>
-    <span id="gpsstart">Non rilevate</span>
-  </div>
+<h2>2. Registrazione GPS</h2>
+<div class="actions">
+<button onclick="gps('start')">📍 Rileva INIZIO</button>
+<button onclick="gps('end')">📍 Rileva FINE</button>
+</div>
+<p id="status" role="status">Pronto per la rilevazione.</p>
+<div class="info"><strong>COORDINATE INIZIALI</strong><span id="gpsstart">Non rilevate</span></div>
+<div class="info"><strong>COORDINATE FINALI</strong><span id="gpsend">Non rilevate</span></div>
 </section>
 
 <section class="card">
-  <h2>3. Disegna sulla fotografia</h2>
-
-  <p class="small">
-    Scegli uno strumento. Trascina sulla fotografia per disegnare
-    il percorso oppure tocca la foto per collocare i punti iniziale e finale.
-  </p>
-
-  <div class="actions">
-    <button onclick="setMode('draw')">🟢 Traccia scavo</button>
-    <button class="red" onclick="setMode('start')">Punto iniziale</button>
-    <button class="red" onclick="setMode('end')">Punto finale</button>
-    <button class="secondary" onclick="undo()">Annulla ultimo</button>
-    <button class="secondary" onclick="resetDrawing()">Cancella disegno</button>
-  </div>
-
-  <canvas id="canvas" width="900" height="600"></canvas>
-  <p id="modeinfo" class="small">Carica una foto per iniziare.</p>
+<h2>3. Disegna sulla fotografia</h2>
+<p class="small">Scegli uno strumento. Trascina per disegnare o tocca per posizionare i marcatori.</p>
+<div class="actions">
+<button onclick="setMode('draw')">🟢 Traccia scavo</button>
+<button class="red" onclick="setMode('start')">Punto iniziale</button>
+<button class="red" onclick="setMode('end')">Punto finale</button>
+<button class="secondary" onclick="undo()">Annulla ultimo</button>
+<button class="secondary" onclick="resetDrawing()">Cancella disegno</button>
+</div>
+<canvas id="canvas" width="900" height="600"></canvas>
+<p id="modeinfo" class="small">Carica una foto per iniziare.</p>
 </section>
 
 <section class="card">
-  <h2>4. Informazioni del rilievo</h2>
-
-  <div class="info">
-    <strong>CANTIERE</strong>
-    <span id="previewJob">Non specificato</span>
-  </div>
-
-  <div class="info">
-    <strong>DATA E ORA</strong>
-    <span id="previewDate">—</span>
-  </div>
-
-  <div class="info">
-    <strong>PERCORSO</strong>
-    <span id="previewPath">Nessun tracciato</span>
-  </div>
-
-  <div class="info">
-    <strong>PUNTO INIZIALE</strong>
-    <span id="previewStart">Non posizionato</span>
-  </div>
-
-  <div class="info">
-    <strong>PUNTO FINALE</strong>
-    <span id="previewEnd">Non posizionato</span>
-  </div>
-
-  <div class="info">
-    <strong>NOTE</strong>
-    <span id="previewNotes">Nessuna nota</span>
-  </div>
+<h2>4. Informazioni del rilievo</h2>
+<div class="info"><strong>CANTIERE</strong><span id="previewJob">Non specificato</span></div>
+<div class="info"><strong>DATA E ORA</strong><span id="previewDate">—</span></div>
+<div class="info"><strong>PERCORSO</strong><span id="previewPath">Nessun tracciato</span></div>
+<div class="info"><strong>PUNTO INIZIALE</strong><span id="previewStart">Non rilevato</span></div>
+<div class="info"><strong>PUNTO FINALE</strong><span id="previewEnd">Non rilevato</span></div>
+<div class="info"><strong>NOTE</strong><span id="previewNotes">Nessuna nota</span></div>
 </section>
 
 <section class="card">
-  <h2>5. Esportazione</h2>
-  <p class="small">
-    La tavola JPG comprende la fotografia annotata, il titolo,
-    la legenda, le coordinate GPS iniziali e le note.
-  </p>
-
-  <button onclick="exportJpg()">⬇ Salva tavola JPG</button>
-  <button class="secondary" onclick="clearAll()">Nuovo rilievo</button>
+<h2>5. Esportazione</h2>
+<button onclick="exportJpg()">⬇ Salva tavola JPG</button>
+<button class="secondary" onclick="clearAll()">Nuovo rilievo</button>
 </section>
-
 </main>
 
 <script>
 'use strict';
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+let img=null,mode='draw',strokes=[],current=null;
+let marks={start:null,end:null};
+let gpsData={start:null,end:null};
+let drawing=false,captureDate=null,gpsRequest=0;
 
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-
-let img = null;
-let mode = 'draw';
-let strokes = [];
-let current = null;
-let marks = {start:null, end:null};
-let gpsStart = null;
-let drawing = false;
-let captureDate = null;
-let gpsRequest = 0;
-
-function say(message){
-  document.getElementById('status').textContent = message;
-}
+function say(s){document.getElementById('status').textContent=s}
 
 function setMode(m){
-  mode = m;
-
-  const messages = {
-    draw:'Trascina sulla foto per disegnare il percorso dello scavo.',
-    start:'Tocca la foto per posizionare il punto iniziale.',
-    end:'Tocca la foto per posizionare il punto finale.'
-  };
-
-  document.getElementById('modeinfo').textContent = messages[m];
+ mode=m;
+ document.getElementById('modeinfo').textContent={
+ draw:'Trascina sulla foto per disegnare il percorso.',
+ start:'Tocca la foto per posizionare il punto iniziale.',
+ end:'Tocca la foto per posizionare il punto finale.'
+ }[m];
 }
 
 function formatCoord(g){
-  if(!g) return 'Non rilevate';
-
-  return g.lat.toFixed(6) + ', ' + g.lon.toFixed(6) +
-    '\nPrecisione GPS ±' + Math.round(g.accuracy) + ' m';
+ return g?g.lat.toFixed(6)+', '+g.lon.toFixed(6)+'\nPrecisione GPS ±'+Math.round(g.accuracy)+' m':'Non rilevato';
 }
 
 function updateInfo(){
-  document.getElementById('gpsstart').textContent = formatCoord(gpsStart);
-
-  document.getElementById('previewJob').textContent =
-    document.getElementById('job').value.trim() || 'Non specificato';
-
-  document.getElementById('previewNotes').textContent =
-    document.getElementById('notes').value.trim() || 'Nessuna nota';
-
-  document.getElementById('previewDate').textContent =
-    captureDate ? captureDate.toLocaleString('it-IT') : '—';
-
-  document.getElementById('previewStart').textContent =
-    marks.start ? 'Punto iniziale posizionato sulla foto' : 'Non posizionato';
-
-  document.getElementById('previewEnd').textContent =
-    marks.end ? 'Punto finale posizionato sulla foto' : 'Non posizionato';
-
-  document.getElementById('previewPath').textContent =
-    strokes.some(s => s.length > 1) ? 'Tracciato disegnato' : 'Nessun tracciato';
+ document.getElementById('gpsstart').textContent=formatCoord(gpsData.start);
+ document.getElementById('gpsend').textContent=formatCoord(gpsData.end);
+ document.getElementById('previewJob').textContent=document.getElementById('job').value.trim()||'Non specificato';
+ document.getElementById('previewNotes').textContent=document.getElementById('notes').value.trim()||'Nessuna nota';
+ document.getElementById('previewDate').textContent=captureDate?captureDate.toLocaleString('it-IT'):'—';
+ document.getElementById('previewStart').textContent=formatCoord(gpsData.start);
+ document.getElementById('previewEnd').textContent=formatCoord(gpsData.end);
+ document.getElementById('previewPath').textContent=strokes.length?'Tracciato disegnato':'Nessun tracciato';
 }
 
-/* GPS SOLO INIZIALE */
-
-function rilevaGpsInizio(){
-  if(!navigator.geolocation){
-    say('Questo browser non supporta la rilevazione GPS.');
-    return;
-  }
-
-  if(!window.isSecureContext){
-    say('Il GPS richiede una connessione HTTPS.');
-    return;
-  }
-
-  const request = ++gpsRequest;
-  say('Ricerca della posizione GPS in corso...');
-
-  navigator.geolocation.getCurrentPosition(
-    p => {
-      if(request !== gpsRequest) return;
-
-      gpsStart = {
-        lat:p.coords.latitude,
-        lon:p.coords.longitude,
-        accuracy:p.coords.accuracy
-      };
-
-      if(!captureDate) captureDate = new Date();
-
-      updateInfo();
-      redraw();
-
-      say('GPS iniziale acquisito. Precisione ±' +
-        Math.round(p.coords.accuracy) + ' metri.');
-
-      if(img) setMode('start');
-    },
-    e => {
-      const messages = {
-        1:'Permesso GPS negato: abilita la posizione nel browser.',
-        2:'Posizione non disponibile: riprova in un luogo aperto.',
-        3:'Tempo scaduto: prova di nuovo.'
-      };
-
-      say(messages[e.code] || 'Errore durante la rilevazione GPS.');
-    },
-    {
-      enableHighAccuracy:true,
-      timeout:30000,
-      maximumAge:0
-    }
-  );
+function gps(which){
+ if(!navigator.geolocation){say('Browser senza supporto GPS.');return}
+ if(!window.isSecureContext){say('Il GPS richiede HTTPS oppure localhost.');return}
+ const req=++gpsRequest;
+ say('Ricerca GPS in corso...');
+ navigator.geolocation.getCurrentPosition(p=>{
+ if(req!==gpsRequest)return;
+ gpsData[which]={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy};
+ if(!captureDate)captureDate=new Date();
+ updateInfo();redraw();
+ say('Posizione acquisita. Precisione ±'+Math.round(p.coords.accuracy)+' metri.');
+ if(img)setMode(which);
+ },e=>{
+ const m={1:'Permesso GPS negato: abilita la posizione nel browser.',2:'Posizione non disponibile: prova all’aperto.',3:'Tempo scaduto: riprova.'};
+ say(m[e.code]||'Errore GPS.');
+ },{enableHighAccuracy:true,timeout:30000,maximumAge:0});
 }
 
-/* CARICAMENTO FOTOGRAFIA */
-
-document.getElementById('photo').addEventListener('change', e => {
-  const file = e.target.files && e.target.files[0];
-  if(!file) return;
-
-  if(!file.type.startsWith('image/')){
-    say('Il file selezionato non è un’immagine valida.');
-    return;
-  }
-
-  const url = URL.createObjectURL(file);
-  const im = new Image();
-
-  im.onload = () => {
-    img = im;
-    strokes = [];
-    current = null;
-    marks = {start:null, end:null};
-
-    const scale = Math.min(1600 / im.width, 1600 / im.height, 1);
-
-    canvas.width = Math.round(im.width * scale);
-    canvas.height = Math.round(im.height * scale);
-
-    captureDate = new Date();
-
-    document.getElementById('photoStatus').textContent =
-      file.name + ' · ' + im.width + ' × ' + im.height + ' px';
-
-    URL.revokeObjectURL(url);
-    redraw();
-    updateInfo();
-
-    document.getElementById('modeinfo').textContent =
-      'Foto caricata. Seleziona lo strumento desiderato.';
-
-    say('Fotografia caricata correttamente.');
-  };
-
-  im.onerror = () => {
-    URL.revokeObjectURL(url);
-    say('Impossibile aprire la fotografia. Prova un altro file.');
-  };
-
-  im.src = url;
+document.getElementById('photo').addEventListener('change',e=>{
+ const file=e.target.files&&e.target.files[0];
+ if(!file)return;
+ if(!file.type.startsWith('image/')){say('File immagine non valido.');return}
+ const url=URL.createObjectURL(file),im=new Image();
+ im.onload=()=>{
+ img=im;strokes=[];marks={start:null,end:null};
+ const scale=Math.min(1600/im.width,1600/im.height,1);
+ canvas.width=Math.round(im.width*scale);
+ canvas.height=Math.round(im.height*scale);
+ captureDate=new Date();
+ document.getElementById('photoStatus').textContent=file.name+' · '+im.width+' × '+im.height+' px';
+ URL.revokeObjectURL(url);redraw();updateInfo();
+ document.getElementById('modeinfo').textContent='Foto caricata. Seleziona uno strumento.';
+ say('Fotografia caricata correttamente.');
+ };
+ im.onerror=()=>{URL.revokeObjectURL(url);say('Impossibile aprire la foto. Prova un altro file.')};
+ im.src=url;
 });
-
-/* DISEGNO E MARCATORI */
 
 function paint(c){
-  const w = c.canvas.width;
-  const h = c.canvas.height;
-
-  c.clearRect(0,0,w,h);
-
-  if(!img){
-    c.fillStyle = '#e8f6ff';
-    c.fillRect(0,0,w,h);
-    c.fillStyle = '#087db5';
-    c.textAlign = 'center';
-    c.font = 'bold 24px Arial';
-    c.fillText('Carica una fotografia',w/2,h/2);
-    c.textAlign = 'left';
-    return;
-  }
-
-  c.drawImage(img,0,0,w,h);
-
-  const sx = w / canvas.width;
-  const sy = h / canvas.height;
-
-  /* Tracciato verde con bordo bianco */
-  for(const s of strokes){
-    if(s.length < 2) continue;
-
-    c.beginPath();
-    c.moveTo(s[0].x * sx,s[0].y * sy);
-
-    for(let i=1;i<s.length;i++){
-      c.lineTo(s[i].x * sx,s[i].y * sy);
-    }
-
-    c.lineCap = 'round';
-    c.lineJoin = 'round';
-
-    /* Bordo bianco */
-    c.strokeStyle = '#ffffff';
-    c.lineWidth = Math.max(12,w/75);
-    c.stroke();
-
-    /* Linea verde, più spessa */
-    c.strokeStyle = '#00c853';
-    c.lineWidth = Math.max(8,w/110);
-    c.stroke();
-  }
-
-  /* Punti iniziale e finale con etichette e frecce */
-  for(const k of ['start','end']){
-    const m = marks[k];
-    if(!m) continue;
-
-    const x = m.x * sx;
-    const y = m.y * sy;
-    const r = Math.max(12,w/65);
-    const isStart = k === 'start';
-    const label = isStart ? 'INIZIO' : 'FINE';
-    const color = isStart ? '#087db5' : '#c62828';
-
-    /* Cerchio */
-    c.beginPath();
-    c.arc(x,y,r,0,Math.PI*2);
-    c.fillStyle = color;
-    c.fill();
-    c.strokeStyle = '#ffffff';
-    c.lineWidth = 4;
-    c.stroke();
-
-    c.fillStyle = '#ffffff';
-    c.font = 'bold 13px Arial';
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.fillText(isStart ? 'I' : 'F',x,y);
-
-    /* Etichetta e freccia, spostate per non coprire il punto */
-    const labelX = Math.min(Math.max(x+20,75),w-75);
-    const labelY = Math.max(25,y-40);
-
-    c.strokeStyle = color;
-    c.lineWidth = 3;
-    c.beginPath();
-    c.moveTo(labelX,labelY+8);
-    c.lineTo(x,y);
-    c.stroke();
-
-    /* Punta della freccia */
-    const angle = Math.atan2(y-(labelY+8),x-labelX);
-    const arrow = 9;
-
-    c.beginPath();
-    c.moveTo(x,y);
-    c.lineTo(
-      x-arrow*Math.cos(angle-0.45),
-      y-arrow*Math.sin(angle-0.45)
-    );
-    c.moveTo(x,y);
-    c.lineTo(
-      x-arrow*Math.cos(angle+0.45),
-      y-arrow*Math.sin(angle+0.45)
-    );
-    c.stroke();
-
-    c.font = 'bold 14px Arial';
-    const tw = c.measureText(label).width;
-    c.fillStyle = '#ffffff';
-    c.fillRect(labelX-tw/2-8,labelY-11,tw+16,24);
-
-    c.strokeStyle = color;
-    c.lineWidth = 2;
-    c.strokeRect(labelX-tw/2-8,labelY-11,tw+16,24);
-
-    c.fillStyle = color;
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.fillText(label,labelX,labelY+1);
-  }
-
-  c.textAlign = 'left';
-  c.textBaseline = 'alphabetic';
+ const w=c.canvas.width,h=c.canvas.height;
+ c.clearRect(0,0,w,h);
+ if(!img){
+ c.fillStyle='#e8f6ff';c.fillRect(0,0,w,h);
+ c.fillStyle='#087db5';c.textAlign='center';c.font='bold 24px Arial';
+ c.fillText('Carica una fotografia',w/2,h/2);
+ c.textAlign='left';return;
+ }
+ c.drawImage(img,0,0,w,h);
+ const sx=w/canvas.width,sy=h/canvas.height;
+ for(const s of strokes){
+ if(s.length<2)continue;
+ c.beginPath();c.moveTo(s[0].x*sx,s[0].y*sy);
+ for(let i=1;i<s.length;i++)c.lineTo(s[i].x*sx,s[i].y*sy);
+ c.strokeStyle='#00df65';c.lineWidth=Math.max(8,w/90);
+ c.lineCap='round';c.lineJoin='round';c.stroke();
+ }
+ for(const k of ['start','end']){
+ const m=marks[k];if(!m)continue;
+ const x=m.x*sx,y=m.y*sy,r=Math.max(11,w/65);
+ c.beginPath();c.arc(x,y,r,0,Math.PI*2);
+ c.fillStyle='#dc3545';c.fill();c.strokeStyle='white';c.lineWidth=3;c.stroke();
+ c.fillStyle='white';c.font='bold 14px Arial';c.textAlign='center';c.textBaseline='middle';
+ c.fillText(k==='start'?'I':'F',x,y);
+ const g=gpsData[k];
+ if(g){
+ const text=g.lat.toFixed(6)+', '+g.lon.toFixed(6);
+ c.font='bold 12px Arial';const tw=c.measureText(text).width;
+ const bx=Math.max(3,Math.min(x-r,w-tw-18)),by=Math.max(3,y-r-32);
+ c.fillStyle='white';c.fillRect(bx,by,tw+14,27);
+ c.fillStyle='#a51f2b';c.textAlign='left';c.fillText(text,bx+7,by+17);
+ }
+ }
+ c.textAlign='left';c.textBaseline='alphabetic';
 }
-
-function redraw(){
-  paint(ctx);
-}
-
+function redraw(){paint(ctx)}
 function point(e){
-  const r = canvas.getBoundingClientRect();
-
-  return {
-    x:(e.clientX-r.left)*canvas.width/r.width,
-    y:(e.clientY-r.top)*canvas.height/r.height
-  };
+ const r=canvas.getBoundingClientRect();
+ return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height};
 }
 
-canvas.addEventListener('pointerdown',e => {
-  if(!img){
-    say('Carica prima una fotografia.');
-    return;
-  }
-
-  e.preventDefault();
-
-  if(mode === 'start' || mode === 'end'){
-    marks[mode] = point(e);
-    redraw();
-    updateInfo();
-    return;
-  }
-
-  drawing = true;
-  current = [point(e)];
-  strokes.push(current);
-
-  try{
-    canvas.setPointerCapture(e.pointerId);
-  }catch(err){}
-
-  redraw();
+canvas.addEventListener('pointerdown',e=>{
+ if(!img){say('Carica prima una foto.');return}
+ e.preventDefault();
+ if(mode==='start'||mode==='end'){
+ marks[mode]=point(e);redraw();updateInfo();return;
+ }
+ drawing=true;current=[point(e)];strokes.push(current);
+ try{canvas.setPointerCapture(e.pointerId)}catch(err){}
+ redraw();
 });
-
-canvas.addEventListener('pointermove',e => {
-  if(!drawing || !current) return;
-
-  e.preventDefault();
-  current.push(point(e));
-  redraw();
+canvas.addEventListener('pointermove',e=>{
+ if(!drawing||!current)return;
+ e.preventDefault();current.push(point(e));redraw();
 });
-
-function stopDraw(){
-  drawing = false;
-  current = null;
-  updateInfo();
-}
-
+function stopDraw(){drawing=false;current=null;updateInfo()}
 canvas.addEventListener('pointerup',stopDraw);
 canvas.addEventListener('pointercancel',stopDraw);
 
 function undo(){
-  if(strokes.length){
-    strokes.pop();
-  }else if(marks.end){
-    marks.end = null;
-  }else if(marks.start){
-    marks.start = null;
-  }
-
-  redraw();
-  updateInfo();
+ if(strokes.length)strokes.pop();
+ else if(marks.end)marks.end=null;
+ else if(marks.start)marks.start=null;
+ redraw();updateInfo();
 }
-
 function resetDrawing(){
-  strokes = [];
-  current = null;
-  marks = {start:null,end:null};
-
-  redraw();
-  updateInfo();
+ strokes=[];current=null;marks={start:null,end:null};
+ redraw();updateInfo();
 }
 
 document.getElementById('job').addEventListener('input',updateInfo);
 document.getElementById('notes').addEventListener('input',updateInfo);
 
-/* ESPORTAZIONE TAVOLA JPG */
-
 function exportJpg(){
-  if(!img){
-    say('Carica prima una fotografia.');
-    return;
-  }
-
+  if(!img){say('Carica prima una foto.');return}
   try{
-    const w = canvas.width;
-    const h = canvas.height;
-    const margin = 28;
-    const headerH = 100;
-    const footerH = 205;
+    const sourceW=canvas.width, sourceH=canvas.height;
+    const W=1280, headerH=96, footerH=202;
+    const scale=W/sourceW, photoH=Math.round(sourceH*scale);
+    const footerY=headerH+photoH, H=footerY+footerH;
+    const out=document.createElement('canvas');
+    out.width=W; out.height=H;
+    const c=out.getContext('2d');
+    c.fillStyle='#fff'; c.fillRect(0,0,W,H);
+    c.strokeStyle='#222'; c.lineWidth=1;
+    c.strokeRect(.5,.5,W-1,H-1);
 
-    const out = document.createElement('canvas');
-    out.width = w + margin*2;
-    out.height = headerH + h + footerH;
+    // Intestazione superiore: fondo bianco, cornice marcata e testo in grassetto
+    c.fillStyle='#ffffff'; c.fillRect(1,1,W-2,headerH-2);
+    c.strokeStyle='#111111'; c.lineWidth=2.5; c.strokeRect(1.5,1.5,W-3,headerH-3);
+    const metaX=914;
+    c.strokeStyle='#111111'; c.lineWidth=2.5;
+    c.beginPath(); c.moveTo(metaX,1); c.lineTo(metaX,headerH-1); c.stroke();
+    c.fillStyle='#ffffff'; c.fillRect(metaX+2,3,W-metaX-4,headerH-6);
+    c.fillStyle='#111111'; c.textAlign='left';
+    c.font='bold 30px Arial';
+    c.fillText('TRACCIA SCAVO – PLANIMETRIA SU FOTO',25,48);
+    const date=(captureDate||new Date()).toLocaleDateString('it-IT');
+    c.fillStyle='#111111';
+    c.font='bold 16px Arial'; c.fillText('DATA RILIEVO FOTO:',930,34);
+    c.font='bold 16px Arial'; c.fillText(date,1090,34);
+    c.font='bold 16px Arial'; c.fillText('OGGETTO:',930,68);
+    c.font='bold 16px Arial';
+    const job=document.getElementById('job').value.trim();
+    c.fillText((job||'Scavo per posa sottoservizi').slice(0,23),1020,62);
 
-    const c = out.getContext('2d');
+    // Fotografia di base
+    c.drawImage(img,0,headerH,W,photoH);
+    const X=p=>p.x*scale, Y=p=>headerH+p.y*scale;
 
-    /* Sfondo bianco */
-    c.fillStyle = '#ffffff';
-    c.fillRect(0,0,out.width,out.height);
-
-    /* Intestazione */
-    c.fillStyle = '#075985';
-    c.font = 'bold 30px Arial';
-    c.textAlign = 'left';
-    c.fillText('SCAVOFOTO',margin,39);
-
-    c.fillStyle = '#193448';
-    c.font = 'bold 17px Arial';
-    c.fillText('TAVOLA FOTOGRAFICA DELLO SCAVO',margin,68);
-
-    c.fillStyle = '#087db5';
-    c.fillRect(margin,headerH-7,w,5);
-
-    /* Fotografia con tracciato e punti */
-    const tmp = document.createElement('canvas');
-    tmp.width = w;
-    tmp.height = h;
-    paint(tmp.getContext('2d'));
-    c.drawImage(tmp,margin,headerH,w,h);
-
-    /* Piè di pagina bianco */
-    const fy = headerH + h;
-    c.fillStyle = '#ffffff';
-    c.fillRect(0,fy,out.width,footerH);
-
-    c.fillStyle = '#087db5';
-    c.fillRect(margin,fy+12,w,3);
-
-    const gap = 22;
-    const colW = (w-gap*2)/3;
-    const x1 = margin;
-    const x2 = margin+colW+gap;
-    const x3 = margin+(colW+gap)*2;
-    const top = fy+37;
-
-    function heading(text,x){
-      c.fillStyle = '#075985';
-      c.font = 'bold 16px Arial';
-      c.textAlign = 'left';
-      c.fillText(text,x,top);
+    // Tracciato: contorno bianco e linea verde
+    for(const stroke of strokes){
+      if(stroke.length<2) continue;
+      c.beginPath(); c.moveTo(X(stroke[0]),Y(stroke[0]));
+      for(let i=1;i<stroke.length;i++) c.lineTo(X(stroke[i]),Y(stroke[i]));
+      c.lineCap='butt'; c.lineJoin='miter';
+      c.strokeStyle='#fff'; c.lineWidth=15; c.stroke();
+      c.strokeStyle='#00a51c'; c.lineWidth=8; c.stroke();
     }
 
-    function line(text,x,y,maxWidth,font){
-      c.fillStyle = '#193448';
-      c.font = font || 'bold 13px Arial';
-      c.textAlign = 'left';
-
-      const words = String(text).split(/\s+/);
-      let currentLine = '';
-      let yy = y;
-      const lineHeight = 18;
-
-      for(const word of words){
-        const test = currentLine ? currentLine+' '+word : word;
-
-        if(c.measureText(test).width > maxWidth && currentLine){
-          c.fillText(currentLine,x,yy);
-          currentLine = word;
-          yy += lineHeight;
-        }else{
-          currentLine = test;
-        }
-      }
-
-      if(currentLine) c.fillText(currentLine,x,yy);
-      return yy+lineHeight;
+    function coord(g){
+      if(!g) return 'Non rilevate';
+      return g.toFixed ? g.toFixed(5).replace('.',',') : '';
+    }
+    function callout(key,title){
+      const p=marks[key], g=gpsData[key];
+      if(!p) return;
+      const px=X(p), py=Y(p);
+      const boxW=195, boxH=61;
+      let bx=key==='start'?px+42:px-boxW-35;
+      let by=py-boxH-30;
+      bx=Math.max(8,Math.min(W-boxW-8,bx));
+      by=Math.max(headerH+8,Math.min(footerY-boxH-8,by));
+      c.fillStyle='#fff'; c.fillRect(bx,by,boxW,boxH);
+      c.strokeStyle='#ff1717'; c.lineWidth=2; c.strokeRect(bx,by,boxW,boxH);
+      c.fillStyle='#ff1717'; c.fillRect(bx,by,boxW,23);
+      c.fillStyle='#fff'; c.font='bold 15px Arial'; c.textAlign='left';
+      c.fillText(title,bx+10,by+16);
+      c.fillStyle='#111'; c.font='bold 13px Arial';
+      c.fillText('Latitudine: '+(g?coord(g.lat)+'° N':'Non rilevata'),bx+10,by+40);
+      c.fillText('Longitudine: '+(g?coord(g.lon)+'° E':'Non rilevata'),bx+10,by+55);
+      const ax=Math.max(bx+12,Math.min(px,bx+boxW-12));
+      const ay=py<by?by:by+boxH;
+      c.strokeStyle='#ff1717'; c.lineWidth=3;
+      c.beginPath(); c.moveTo(ax,ay); c.lineTo(px,py); c.stroke();
+      const a=Math.atan2(py-ay,px-ax);
+      c.fillStyle='#ff1717'; c.beginPath();
+      c.moveTo(px,py);
+      c.lineTo(px-12*Math.cos(a-.45),py-12*Math.sin(a-.45));
+      c.lineTo(px-12*Math.cos(a+.45),py-12*Math.sin(a+.45));
+      c.closePath(); c.fill();
     }
 
-    /* Colonna 1: legenda */
-    heading('LEGENDA',x1);
+    // Marcatori rossi senza lettere, come nella tavola di riferimento
+    for(const key of ['start','end']){
+      const p=marks[key]; if(!p) continue;
+      const x=X(p), y=Y(p);
+      c.beginPath(); c.arc(x,y,12,0,Math.PI*2);
+      c.fillStyle='#ff1717'; c.fill();
+      c.lineWidth=3; c.strokeStyle='#fff'; c.stroke();
+      c.lineWidth=1; c.strokeStyle='#222'; c.stroke();
+    }
+    callout('start','INIZIO SCAVO');
+    callout('end','FINE SCAVO');
 
-    let y1 = top+26;
-    c.strokeStyle = '#00c853';
-    c.lineWidth = 8;
-    c.lineCap = 'round';
-    c.beginPath();
-    c.moveTo(x1,y1);
-    c.lineTo(x1+35,y1);
-    c.stroke();
+    // Fascia inferiore in tre colonne
+    c.fillStyle='#ffffff'; c.fillRect(0,footerY,W,footerH);
+    c.strokeStyle='#111111'; c.lineWidth=2.5;
+    c.strokeRect(1.5,footerY+1.5,W-3,footerH-3);
+    c.fillStyle='#111111'; c.fillRect(0,footerY,W,4);
+    c.strokeStyle='#111111'; c.lineWidth=2;
+    c.beginPath(); c.moveTo(0,footerY); c.lineTo(W,footerY);
+    c.moveTo(428,footerY); c.lineTo(428,H);
+    c.moveTo(914,footerY); c.lineTo(914,H); c.stroke();
+    const top=footerY+37;
 
-    y1 = line('Percorso dello scavo',x1+45,y1+5,colW-45,'bold 13px Arial');
+    // Legenda
+    c.fillStyle='#111111'; c.font='bold 21px Arial'; c.fillText('LEGENDA',28,top);
+    c.fillRect(28,top+8,120,3);
+    c.strokeStyle='#008f19'; c.lineWidth=8;
+    c.beginPath(); c.moveTo(29,top+22); c.lineTo(110,top+22); c.stroke();
+    c.font='bold 16px Arial'; c.fillStyle='#111111';
+    c.fillText('Traccia scavo',131,top+27);
+    function legendDot(y){
+      c.beginPath(); c.arc(69,y,10,0,Math.PI*2);
+      c.fillStyle='#ff1717'; c.fill(); c.lineWidth=3;
+      c.strokeStyle='#fff'; c.stroke();
+      c.beginPath(); c.arc(69,y,11,0,Math.PI*2);
+      c.lineWidth=1; c.strokeStyle='#555'; c.stroke();
+    }
+    legendDot(top+49); c.fillStyle='#111'; c.fillText('Inizio scavo (coordinate GPS)',131,top+54);
+    legendDot(top+76); c.fillText('Fine scavo (coordinate GPS)',131,top+81);
 
-    c.fillStyle = '#087db5';
-    c.beginPath();
-    c.arc(x1+10,y1+2,7,0,Math.PI*2);
-    c.fill();
+    // Coordinate GPS
+    c.font='bold 21px Arial'; c.fillStyle='#111111';
+    c.fillText('COORDINATE GPS',449,top); c.fillRect(449,top+8,210,3);
+    function coordinateRow(label,g,y){
+      c.font='bold 16px Arial'; c.fillText(label,449,y);
+      c.font='bold 16px Arial';
+      const value=g
+        ? coord(g.lat)+'° N     '+coord(g.lon)+'° E'
+        : 'Non rilevate';
+      c.fillText(value,585,y);
+    }
+    coordinateRow('Inizio scavo:',gpsData.start,top+36);
+    coordinateRow('Fine scavo:',gpsData.end,top+70);
 
-    y1 = line('I = punto iniziale',x1+25,y1+6,colW-25,'bold 13px Arial');
+    // Note con testo a capo
+    c.font='bold 21px Arial'; c.fillStyle='#111111'; c.fillText('NOTE',941,top); c.fillRect(941,top+8,68,3);
+    c.font='bold 15px Arial';
+    const note=document.getElementById('notes').value.trim()
+      ||'La traccia dello scavo è indicativa e rappresenta il percorso previsto per la posa del sottoservizio.';
+    const maxW=310, words=note.split(/\s+/);
+    let line='', yy=top+25;
+    for(const word of words){
+      const test=line?line+' '+word:word;
+      if(c.measureText(test).width>maxW && line){
+        c.fillText(line,941,yy); yy+=20; line=word;
+        if(yy>H-8) break;
+      }else line=test;
+    }
+    if(line && yy<=H-8) c.fillText(line,941,yy);
 
-    c.fillStyle = '#c62828';
-    c.beginPath();
-    c.arc(x1+10,y1+2,7,0,Math.PI*2);
-    c.fill();
+    const a=document.createElement('a');
+    a.download='ScavoFoto_'+new Date().toISOString().slice(0,10)+'.jpg';
+    a.href=out.toDataURL('image/jpeg',0.96);
+    a.click();
+    say('Tavola JPG creata.');
+  }catch(e){
+    console.error(e);
+    say('Errore durante il salvataggio JPG: '+e.message);
+  }
+}
 
-    line('F = punto finale',x1+25,y1+6,colW-25,'bold 13px Arial');
+function clearAll(){
+ if(!confirm('Vuoi iniziare un nuovo rilievo?'))return;
+ gpsRequest++;img=null;strokes=[];current=null;
+ marks={start:null,end:null};gpsData={start:null,end:null};
+ captureDate=null;drawing=false;
+ document.getElementById('photo').value='';
+ document.getElementById('job').value='';
+ document.getElementById('notes').value='';
+ document.getElementById('photoStatus').textContent='Nessuna foto caricata.';
+ document.getElementById('modeinfo').textContent='Carica una foto per iniziare.';
+ updateInfo();redraw();say('Nuovo rilievo pronto.');
+}
 
-    /* Colonna 2: GPS iniziale */
-    heading('GPS INIZIALE',x2);
-
-    let y2 = top+29;
-
-    if(gpsStart){
-      y2 = line('Latitudine: '+gpsStart.lat.toFixed(6),x2,y2,colW,'bold 13px Arial');
-      y2 = line('Longitudine: '+gpsStart.lon.toFixed(6),x2,y2,colW,'bold 13px Arial');
-      y2 = line('Precisione: ±'+Math.round
+setMode('draw');updateInfo();redraw();
+</script>
+</body>
+</html>
