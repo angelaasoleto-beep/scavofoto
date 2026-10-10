@@ -130,7 +130,23 @@ const livePhotos={};let extraPhotos=[];
 function buildLiveFields(){const root=document.getElementById('livePhotoFields');root.innerHTML='';liveKinds.forEach(([id,label])=>{const d=document.createElement('div');d.className='info';d.innerHTML=`<strong>${label}</strong><input type="file" accept="image/*" capture="environment" id="cam_${id}"><input type="file" accept="image/*" id="gal_${id}"><button type="button" id="btncam_${id}">📷 Scatta</button><button type="button" class="secondary" id="btngal_${id}">🖼️ Galleria</button><div id="state_${id}" class="small">Foto non caricata</div>`;d.querySelector('#btncam_'+id).onclick=()=>document.getElementById('cam_'+id).click();d.querySelector('#btngal_'+id).onclick=()=>document.getElementById('gal_'+id).click();root.appendChild(d);['cam_','gal_'].forEach(pre=>document.getElementById(pre+id).addEventListener('change',e=>{if(e.target.files[0])loadLivePhoto(id,e.target.files[0],label)}))})}
 function liveMsg(t){document.getElementById('liveStatus').textContent=t}
 async function reverseAddress(lat,lon){const r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+lat+'&lon='+lon);if(!r.ok)throw Error('Indirizzo non disponibile');const j=await r.json();if(!j.display_name)throw Error('Indirizzo non trovato');return j.display_name}
-function loadLivePhoto(id,file,label){liveMsg('Rilevo la posizione GPS…');if(!navigator.geolocation){liveMsg('GPS non disponibile su questo dispositivo.');return}navigator.geolocation.getCurrentPosition(async pos=>{try{const lat=pos.coords.latitude,lon=pos.coords.longitude;let address=await reverseAddress(lat,lon);const data=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result);fr.onerror=reject;fr.readAsDataURL(file)});const item={data,lat,lon,address,label};if(id==='extra'){extraPhotos.push(item);document.getElementById('extraLiveList').textContent=extraPhotos.length+' foto aggiuntive geolocalizzate'}else{livePhotos[id]=item;document.getElementById('state_'+id).textContent='✓ Foto caricata e geolocalizzata: '+lat.toFixed(6)+', '+lon.toFixed(6)}liveMsg('Posizione acquisita: '+address)}catch(e){liveMsg('Non sono riuscito a ricavare l’indirizzo GPS. Riprova con connessione attiva.')}},e=>liveMsg('GPS non acquisito. Attiva la posizione e autorizza il browser, poi seleziona di nuovo la foto.'),{enableHighAccuracy:true,timeout:20000,maximumAge:0})}
+async function loadLivePhoto(id,file,label){
+ if(!file)return;
+ liveMsg('Carico la foto e rilevo la posizione GPS…');
+ let data;
+ try{data=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result);fr.onerror=()=>reject(new Error('Lettura file non riuscita'));fr.readAsDataURL(file)})}
+ catch(e){liveMsg('Non riesco a leggere questa foto. Prova a sceglierla di nuovo.');return}
+ if(!navigator.geolocation){liveMsg('Foto letta, ma GPS non disponibile: abilita la posizione e seleziona di nuovo la foto.');return}
+ navigator.geolocation.getCurrentPosition(async pos=>{
+  const lat=pos.coords.latitude,lon=pos.coords.longitude;
+  let address='Indirizzo non disponibile';
+  try{address=await reverseAddress(lat,lon)}catch(e){/* la foto resta caricabile anche se il servizio indirizzi non risponde */}
+  const item={data,lat,lon,address,label};
+  if(id==='extra'){extraPhotos.push(item);document.getElementById('extraLiveList').textContent=extraPhotos.length+' foto aggiuntive con GPS'}
+  else{livePhotos[id]=item;document.getElementById('state_'+id).textContent='✓ Foto caricata · GPS: '+lat.toFixed(6)+', '+lon.toFixed(6)+(address==='Indirizzo non disponibile'?' · indirizzo non disponibile':'')}
+  liveMsg(address==='Indirizzo non disponibile'?'Foto caricata con coordinate GPS. Indirizzo non reperibile: verranno mostrate le coordinate.':'Foto caricata con GPS: '+address);
+ },e=>{liveMsg('Foto selezionata ma non geolocalizzata. Attiva la posizione e autorizza il browser, poi seleziona di nuovo la foto.');}, {enableHighAccuracy:true,timeout:20000,maximumAge:0});
+}
 document.getElementById('extraLivePhotos').addEventListener('change',e=>Array.from(e.target.files).forEach(f=>loadLivePhoto('extra',f,'Foto aggiuntiva')));
 async function makeLivePdf(){
  const order=document.getElementById('liveOrder').value.trim(),address=document.getElementById('liveAddress').value.trim(),date=document.getElementById('liveDate').value;
@@ -172,7 +188,17 @@ function setMode(m){
 }
 
 function formatCoord(g){
- return g?g.lat.toFixed(6)+', '+g.lon.toFixed(6)+'\nPrecisione GPS ±'+Math.round(g.accuracy)+' m':'Non rilevato';
+ if(!g)return 'Non rilevato';
+ const coords=g.lat.toFixed(6)+', '+g.lon.toFixed(6)+'\nPrecisione GPS ±'+Math.round(g.accuracy)+' m';
+ return g.address?coords+'\nIndirizzo: '+g.address:coords+'\nIndirizzo: ricerca in corso…';
+}
+async function lookupGpsAddress(lat,lon){
+ try{
+  const r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon));
+  if(!r.ok)throw new Error('Servizio indirizzi non disponibile');
+  const j=await r.json();
+  return j.display_name||'Indirizzo non disponibile';
+ }catch(e){return 'Indirizzo non disponibile';}
 }
 
 function updateInfo(){
@@ -193,10 +219,16 @@ function gps(which){
  say('Ricerca GPS in corso...');
  navigator.geolocation.getCurrentPosition(p=>{
  if(req!==gpsRequest)return;
- gpsData[which]={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy};
+ gpsData[which]={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy,address:''};
  if(!captureDate)captureDate=new Date();
  updateInfo();redraw();
- say('Posizione acquisita. Precisione ±'+Math.round(p.coords.accuracy)+' metri.');
+ say('Posizione acquisita. Cerco l’indirizzo…');
+ lookupGpsAddress(p.coords.latitude,p.coords.longitude).then(address=>{
+   if(!gpsData[which]||gpsData[which].lat!==p.coords.latitude||gpsData[which].lon!==p.coords.longitude)return;
+   gpsData[which].address=address;
+   updateInfo();redraw();
+   say('Posizione acquisita. Precisione ±'+Math.round(p.coords.accuracy)+' metri. '+address);
+ });
  if(img)setMode(which);
  },e=>{
  const m={1:'Permesso GPS negato: abilita la posizione nel browser.',2:'Posizione non disponibile: prova all’aperto.',3:'Tempo scaduto: riprova.'};
@@ -390,7 +422,11 @@ function exportJpg(){
     // Tracciato: contorno bianco e linea verde
     for(const stroke of strokes){
       if(stroke.length<2) continue;
-      const cleanStroke=smoothStroke(stroke);
+      const cleanStroke=smoothStroke(stroke).map(p=>({x:p.x,y:p.y}));
+      // Aggancia gli estremi della traccia ai marcatori impostati sulla foto.
+      const strokeIndex=strokes.indexOf(stroke);
+      if(strokeIndex===0 && marks.start)cleanStroke[0]={x:marks.start.x,y:marks.start.y};
+      if(strokeIndex===strokes.length-1 && marks.end)cleanStroke[cleanStroke.length-1]={x:marks.end.x,y:marks.end.y};
       c.beginPath(); c.moveTo(X(cleanStroke[0]),Y(cleanStroke[0]));
       for(let i=1;i<cleanStroke.length;i++) c.lineTo(X(cleanStroke[i]),Y(cleanStroke[i]));
       c.lineCap='butt'; c.lineJoin='miter';
