@@ -132,20 +132,33 @@ function liveMsg(t){document.getElementById('liveStatus').textContent=t}
 async function reverseAddress(lat,lon){const r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+lat+'&lon='+lon);if(!r.ok)throw Error('Indirizzo non disponibile');const j=await r.json();if(!j.display_name)throw Error('Indirizzo non trovato');return j.display_name}
 async function loadLivePhoto(id,file,label){
  if(!file)return;
- liveMsg('Carico la foto e rilevo la posizione GPS…');
+ liveMsg('Leggo la foto…');
  let data;
- try{data=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result);fr.onerror=()=>reject(new Error('Lettura file non riuscita'));fr.readAsDataURL(file)})}
- catch(e){liveMsg('Non riesco a leggere questa foto. Prova a sceglierla di nuovo.');return}
+ try{
+  // Riduce le immagini molto grandi prima di salvarle: il caricamento e il PDF diventano più rapidi.
+  const bitmap=await createImageBitmap(file);
+  const maxSide=2000,ratio=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(bitmap.width*ratio));c.height=Math.max(1,Math.round(bitmap.height*ratio));
+  c.getContext('2d',{alpha:false}).drawImage(bitmap,0,0,c.width,c.height);bitmap.close();
+  data=c.toDataURL('image/jpeg',0.84);
+ }catch(e){
+  try{data=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result);fr.onerror=()=>reject(new Error('Lettura file non riuscita'));fr.readAsDataURL(file)})}
+  catch(err){liveMsg('Non riesco a leggere questa foto. Prova a sceglierla di nuovo.');return}
+ }
  if(!navigator.geolocation){liveMsg('Foto letta, ma GPS non disponibile: abilita la posizione e seleziona di nuovo la foto.');return}
- navigator.geolocation.getCurrentPosition(async pos=>{
+ liveMsg('Foto letta. Rilevo la posizione GPS…');
+ navigator.geolocation.getCurrentPosition(pos=>{
   const lat=pos.coords.latitude,lon=pos.coords.longitude;
-  let address='Indirizzo non disponibile';
-  try{address=await reverseAddress(lat,lon)}catch(e){/* la foto resta caricabile anche se il servizio indirizzi non risponde */}
-  const item={data,lat,lon,address,label};
+  const item={data,lat,lon,address:'Ricerca indirizzo…',label,addressPromise:null};
   if(id==='extra'){extraPhotos.push(item);document.getElementById('extraLiveList').textContent=extraPhotos.length+' foto aggiuntive con GPS'}
-  else{livePhotos[id]=item;document.getElementById('state_'+id).textContent='✓ Foto caricata · GPS: '+lat.toFixed(6)+', '+lon.toFixed(6)+(address==='Indirizzo non disponibile'?' · indirizzo non disponibile':'')}
-  liveMsg(address==='Indirizzo non disponibile'?'Foto caricata con coordinate GPS. Indirizzo non reperibile: verranno mostrate le coordinate.':'Foto caricata con GPS: '+address);
- },e=>{liveMsg('Foto selezionata ma non geolocalizzata. Attiva la posizione e autorizza il browser, poi seleziona di nuovo la foto.');}, {enableHighAccuracy:true,timeout:20000,maximumAge:0});
+  else{livePhotos[id]=item;document.getElementById('state_'+id).textContent='✓ Foto pronta · GPS: '+lat.toFixed(6)+', '+lon.toFixed(6)}
+  liveMsg('Foto caricata rapidamente con coordinate GPS. Recupero l’indirizzo in secondo piano…');
+  item.addressPromise=reverseAddress(lat,lon).then(a=>{item.address=a;return a}).catch(()=>{item.address='Indirizzo non disponibile';return item.address}).then(a=>{
+   if(id!=='extra'&&livePhotos[id]===item)document.getElementById('state_'+id).textContent='✓ Foto caricata · GPS: '+lat.toFixed(6)+', '+lon.toFixed(6)+(a==='Indirizzo non disponibile'?' · indirizzo non disponibile':' · indirizzo trovato');
+   liveMsg(a==='Indirizzo non disponibile'?'Foto pronta con coordinate GPS; indirizzo non reperibile.':'Foto pronta con GPS e indirizzo.');
+   return a;
+  });
+ },e=>{liveMsg('Foto selezionata ma non geolocalizzata. Attiva la posizione e autorizza il browser, poi seleziona di nuovo la foto.');}, {enableHighAccuracy:false,timeout:10000,maximumAge:60000});
 }
 document.getElementById('extraLivePhotos').addEventListener('change',e=>Array.from(e.target.files).forEach(f=>loadLivePhoto('extra',f,'Foto aggiuntiva')));
 async function makeLivePdf(){
@@ -155,6 +168,7 @@ async function makeLivePdf(){
  if(!window.jspdf){liveMsg('Impossibile caricare il creatore PDF: controlla la connessione.');return}
  const {jsPDF}=window.jspdf,pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}),all=liveKinds.map(([id,label])=>({...livePhotos[id],label})).concat(extraPhotos);
  liveMsg('Preparo le foto con la geolocalizzazione in sovrimpressione…');
+ await Promise.all(all.map(ph=>ph.addressPromise||Promise.resolve()));
  function loadImage(src){return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=src})}
  for(let i=0;i<all.length;i++){
   if(i)pdf.addPage();const ph=all[i],im=await loadImage(ph.data),c=document.createElement('canvas');const cx=c.getContext('2d');c.width=im.naturalWidth||im.width;c.height=im.naturalHeight||im.height;cx.drawImage(im,0,0,c.width,c.height);
@@ -419,19 +433,23 @@ function exportJpg(){
     c.drawImage(img,0,headerH,W,photoH);
     const X=p=>p.x*scale, Y=p=>headerH+p.y*scale;
 
-    // Tracciato: contorno bianco e linea verde
+    // Unisce i segmenti in un unico percorso e ancora gli estremi ai marcatori.
+    const route=[];
     for(const stroke of strokes){
-      if(stroke.length<2) continue;
-      const cleanStroke=smoothStroke(stroke).map(p=>({x:p.x,y:p.y}));
-      // Aggancia gli estremi della traccia ai marcatori impostati sulla foto.
-      const strokeIndex=strokes.indexOf(stroke);
-      if(strokeIndex===0 && marks.start)cleanStroke[0]={x:marks.start.x,y:marks.start.y};
-      if(strokeIndex===strokes.length-1 && marks.end)cleanStroke[cleanStroke.length-1]={x:marks.end.x,y:marks.end.y};
-      c.beginPath(); c.moveTo(X(cleanStroke[0]),Y(cleanStroke[0]));
-      for(let i=1;i<cleanStroke.length;i++) c.lineTo(X(cleanStroke[i]),Y(cleanStroke[i]));
-      c.lineCap='butt'; c.lineJoin='miter';
-      c.strokeStyle='#fff'; c.lineWidth=15; c.stroke();
-      c.strokeStyle='#00a51c'; c.lineWidth=8; c.stroke();
+      if(stroke.length<2)continue;
+      const clean=smoothStroke(stroke);
+      for(const point of clean){
+        const prev=route[route.length-1];
+        if(!prev||Math.hypot(point.x-prev.x,point.y-prev.y)>0.5)route.push({x:point.x,y:point.y});
+      }
+    }
+    if(route.length>=2){
+      if(marks.start)route[0]={x:marks.start.x,y:marks.start.y};
+      if(marks.end)route[route.length-1]={x:marks.end.x,y:marks.end.y};
+      c.beginPath();c.moveTo(X(route[0]),Y(route[0]));
+      for(let i=1;i<route.length;i++)c.lineTo(X(route[i]),Y(route[i]));
+      c.lineCap='round';c.lineJoin='round';c.strokeStyle='#fff';c.lineWidth=15;c.stroke();
+      c.strokeStyle='#00a51c';c.lineWidth=8;c.stroke();
     }
 
     function coord(g){
@@ -442,7 +460,7 @@ function exportJpg(){
       const p=marks[key], g=key==='start'?gpsData.start:null;
       if(!p) return;
       const px=X(p), py=Y(p);
-      const boxW=195, boxH=61;
+      const boxW=245, boxH=key==='start'?108:61;
       let bx=key==='start'?px+42:px-boxW-35;
       let by=py-boxH-30;
       bx=Math.max(8,Math.min(W-boxW-8,bx));
@@ -454,8 +472,13 @@ function exportJpg(){
       c.fillText(title,bx+10,by+16);
       c.fillStyle='#111'; c.font='bold 13px Arial';
       if(key==='start'){
-        c.fillText('Latitudine: '+(g?coord(g.lat)+'° N':'Non rilevata'),bx+10,by+40);
-        c.fillText('Longitudine: '+(g?coord(g.lon)+'° E':'Non rilevata'),bx+10,by+55);
+        c.fillText('Latitudine: '+(g?coord(g.lat):'Non rilevata'),bx+10,by+40);
+        c.fillText('Longitudine: '+(g?coord(g.lon):'Non rilevata'),bx+10,by+57);
+        c.font='12px Arial';
+        const addr=(gpsData.start&&gpsData.start.address)||'Indirizzo non disponibile';
+        let line='',yy=by+73;const words=('Indirizzo: '+addr).split(/\s+/);
+        for(const word of words){const test=line?line+' '+word:word;if(c.measureText(test).width>boxW-18&&line){c.fillText(line,bx+10,yy);yy+=14;line=word;if(yy>by+101)break}else line=test;}
+        if(line&&yy<=by+101)c.fillText(line,bx+10,yy);
       }else{
         c.fillText('Posizione manuale',bx+10,by+43);
       }
