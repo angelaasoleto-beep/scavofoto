@@ -178,7 +178,7 @@ function paint(c){
  if(s.length<2)continue;
  c.beginPath();c.moveTo(s[0].x*sx,s[0].y*sy);
  for(let i=1;i<s.length;i++)c.lineTo(s[i].x*sx,s[i].y*sy);
- c.strokeStyle='#00df65';c.lineWidth=Math.max(4,w/180);
+ c.strokeStyle='#00df65';c.lineWidth=Math.max(8,w/90);
  c.lineCap='round';c.lineJoin='round';c.stroke();
  }
  for(const k of ['start','end']){
@@ -238,42 +238,164 @@ document.getElementById('job').addEventListener('input',updateInfo);
 document.getElementById('notes').addEventListener('input',updateInfo);
 
 function exportJpg(){
- if(!img){say('Carica prima una foto.');return}
- try{
- const margin=24,w=canvas.width,h=canvas.height;
- const out=document.createElement('canvas');
- out.width=(w+margin*2)*2;
- out.height=(h+340)*2;
- const c=out.getContext('2d');c.scale(2,2);
- c.fillStyle='white';c.fillRect(0,0,w+margin*2,h+340);
- const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
- paint(tmp.getContext('2d'));c.drawImage(tmp,margin,0);
- let y=h+28;
- c.fillStyle='#0787c1';c.fillRect(margin,y,w,5);y+=32;
- c.fillStyle='#075985';c.font='bold 22px Arial';
- c.fillText('SCAVOFOTO - TAVOLA FOTOGRAFICA',margin,y);y+=28;
- const rows=[
- ['CANTIERE',document.getElementById('job').value.trim()||'Non specificato'],
- ['DATA E ORA',(captureDate||new Date()).toLocaleString('it-IT')],
- ['PUNTO INIZIALE',formatCoord(gpsData.start)],
- ['PUNTO FINALE',formatCoord(gpsData.end)],
- ['NOTE',document.getElementById('notes').value.trim()||'Nessuna nota']
- ];
- for(const row of rows){
- c.fillStyle='#eaf6fd';c.fillRect(margin,y,w,42);
- c.fillStyle='#087db5';c.font='bold 11px Arial';c.fillText(row[0],margin+10,y+14);
- c.fillStyle='#193448';c.font='13px Arial';
- const value=String(row[1]).replace(/\n/g,' | ');
- c.fillText(value.slice(0,Math.floor(w/7)),margin+10,y+32);
- y+=48;
- }
- c.fillStyle='#62798a';c.font='11px Arial';
- c.fillText('Legenda: linea verde = percorso | I = inizio | F = fine',margin,h+320);
- const a=document.createElement('a');
- a.download='ScavoFoto_'+new Date().toISOString().slice(0,10)+'.jpg';
- a.href=out.toDataURL('image/jpeg',0.94);a.click();
- say('Tavola JPG creata.');
- }catch(e){say('Errore durante il salvataggio JPG.')}
+  if(!img){say('Carica prima una foto.');return}
+  try{
+    const sourceW=canvas.width, sourceH=canvas.height;
+    const W=1280, headerH=96, footerH=202;
+    const scale=W/sourceW, photoH=Math.round(sourceH*scale);
+    const footerY=headerH+photoH, H=footerY+footerH;
+    const out=document.createElement('canvas');
+    out.width=W; out.height=H;
+    const c=out.getContext('2d');
+    c.fillStyle='#fff'; c.fillRect(0,0,W,H);
+    c.strokeStyle='#222'; c.lineWidth=1;
+    c.strokeRect(.5,.5,W-1,H-1);
+
+    // Intestazione superiore: fondo bianco, cornice marcata e testo in grassetto
+    c.fillStyle='#ffffff'; c.fillRect(1,1,W-2,headerH-2);
+    c.strokeStyle='#111111'; c.lineWidth=2.5; c.strokeRect(1.5,1.5,W-3,headerH-3);
+    const metaX=914;
+    c.strokeStyle='#111111'; c.lineWidth=2.5;
+    c.beginPath(); c.moveTo(metaX,1); c.lineTo(metaX,headerH-1); c.stroke();
+    c.fillStyle='#ffffff'; c.fillRect(metaX+2,3,W-metaX-4,headerH-6);
+    c.fillStyle='#111111'; c.textAlign='left';
+    c.font='bold 30px Arial';
+    c.fillText('TRACCIA SCAVO – PLANIMETRIA SU FOTO',25,58);
+    const date=(captureDate||new Date()).toLocaleDateString('it-IT');
+    c.fillStyle='#111111';
+    c.font='bold 16px Arial'; c.fillText('DATA RILIEVO FOTO:',930,34);
+    c.font='bold 16px Arial'; c.fillText(date,1090,34);
+    c.font='bold 16px Arial'; c.fillText('OGGETTO:',930,68);
+    c.font='bold 16px Arial';
+    const job=document.getElementById('job').value.trim();
+    c.fillText((job||'Scavo per posa sottoservizi').slice(0,23),1020,62);
+
+    // Fotografia di base
+    c.drawImage(img,0,headerH,W,photoH);
+    const X=p=>p.x*scale, Y=p=>headerH+p.y*scale;
+
+    // Tracciato: contorno bianco e linea verde
+    for(const stroke of strokes){
+      if(stroke.length<2) continue;
+      c.beginPath(); c.moveTo(X(stroke[0]),Y(stroke[0]));
+      for(let i=1;i<stroke.length;i++) c.lineTo(X(stroke[i]),Y(stroke[i]));
+      c.lineCap='butt'; c.lineJoin='miter';
+      c.strokeStyle='#fff'; c.lineWidth=15; c.stroke();
+      c.strokeStyle='#00a51c'; c.lineWidth=8; c.stroke();
+    }
+
+    function coord(g){
+      if(!g) return 'Non rilevate';
+      return g.toFixed ? g.toFixed(5).replace('.',',') : '';
+    }
+    function callout(key,title){
+      const p=marks[key], g=gpsData[key];
+      if(!p) return;
+      const px=X(p), py=Y(p);
+      const boxW=195, boxH=61;
+      let bx=key==='start'?px+42:px-boxW-35;
+      let by=py-boxH-30;
+      bx=Math.max(8,Math.min(W-boxW-8,bx));
+      by=Math.max(headerH+8,Math.min(footerY-boxH-8,by));
+      c.fillStyle='#fff'; c.fillRect(bx,by,boxW,boxH);
+      c.strokeStyle='#ff1717'; c.lineWidth=2; c.strokeRect(bx,by,boxW,boxH);
+      c.fillStyle='#ff1717'; c.fillRect(bx,by,boxW,23);
+      c.fillStyle='#fff'; c.font='bold 15px Arial'; c.textAlign='left';
+      c.fillText(title,bx+10,by+16);
+      c.fillStyle='#111'; c.font='bold 13px Arial';
+      c.fillText('Latitudine: '+(g?coord(g.lat)+'° N':'Non rilevata'),bx+10,by+40);
+      c.fillText('Longitudine: '+(g?coord(g.lon)+'° E':'Non rilevata'),bx+10,by+55);
+      const ax=Math.max(bx+12,Math.min(px,bx+boxW-12));
+      const ay=py<by?by:by+boxH;
+      c.strokeStyle='#ff1717'; c.lineWidth=3;
+      c.beginPath(); c.moveTo(ax,ay); c.lineTo(px,py); c.stroke();
+      const a=Math.atan2(py-ay,px-ax);
+      c.fillStyle='#ff1717'; c.beginPath();
+      c.moveTo(px,py);
+      c.lineTo(px-12*Math.cos(a-.45),py-12*Math.sin(a-.45));
+      c.lineTo(px-12*Math.cos(a+.45),py-12*Math.sin(a+.45));
+      c.closePath(); c.fill();
+    }
+
+    // Marcatori rossi senza lettere, come nella tavola di riferimento
+    for(const key of ['start','end']){
+      const p=marks[key]; if(!p) continue;
+      const x=X(p), y=Y(p);
+      c.beginPath(); c.arc(x,y,12,0,Math.PI*2);
+      c.fillStyle='#ff1717'; c.fill();
+      c.lineWidth=3; c.strokeStyle='#fff'; c.stroke();
+      c.lineWidth=1; c.strokeStyle='#222'; c.stroke();
+    }
+    callout('start','INIZIO SCAVO');
+    callout('end','FINE SCAVO');
+
+    // Fascia inferiore in tre colonne
+    c.fillStyle='#ffffff'; c.fillRect(0,footerY,W,footerH);
+    c.strokeStyle='#111111'; c.lineWidth=2.5;
+    c.strokeRect(1.5,footerY+1.5,W-3,footerH-3);
+    c.fillStyle='#111111'; c.fillRect(0,footerY,W,4);
+    c.strokeStyle='#111111'; c.lineWidth=2;
+    c.beginPath(); c.moveTo(0,footerY); c.lineTo(W,footerY);
+    c.moveTo(428,footerY); c.lineTo(428,H);
+    c.moveTo(914,footerY); c.lineTo(914,H); c.stroke();
+    const top=footerY+37;
+
+    // Legenda
+    c.fillStyle='#111111'; c.font='bold 21px Arial'; c.fillText('LEGENDA',28,top);
+    c.fillRect(28,top+8,120,3);
+    c.strokeStyle='#008f19'; c.lineWidth=8;
+    c.beginPath(); c.moveTo(29,top+22); c.lineTo(110,top+22); c.stroke();
+    c.font='bold 16px Arial'; c.fillStyle='#111111';
+    c.fillText('Traccia scavo',131,top+27);
+    function legendDot(y){
+      c.beginPath(); c.arc(69,y,10,0,Math.PI*2);
+      c.fillStyle='#ff1717'; c.fill(); c.lineWidth=3;
+      c.strokeStyle='#fff'; c.stroke();
+      c.beginPath(); c.arc(69,y,11,0,Math.PI*2);
+      c.lineWidth=1; c.strokeStyle='#555'; c.stroke();
+    }
+    legendDot(top+49); c.fillStyle='#111'; c.fillText('Inizio scavo (coordinate GPS)',131,top+54);
+    legendDot(top+76); c.fillText('Fine scavo (coordinate GPS)',131,top+81);
+
+    // Coordinate GPS
+    c.font='bold 21px Arial'; c.fillStyle='#111111';
+    c.fillText('COORDINATE GPS',449,top); c.fillRect(449,top+8,210,3);
+    function coordinateRow(label,g,y){
+      c.font='bold 16px Arial'; c.fillText(label,449,y);
+      c.font='bold 16px Arial';
+      const value=g
+        ? coord(g.lat)+'° N     '+coord(g.lon)+'° E'
+        : 'Non rilevate';
+      c.fillText(value,585,y);
+    }
+    coordinateRow('Inizio scavo:',gpsData.start,top+36);
+    coordinateRow('Fine scavo:',gpsData.end,top+70);
+
+    // Note con testo a capo
+    c.font='bold 21px Arial'; c.fillStyle='#111111'; c.fillText('NOTE',941,top); c.fillRect(941,top+8,68,3);
+    c.font='bold 15px Arial';
+    const note=document.getElementById('notes').value.trim()
+      ||'La traccia dello scavo è indicativa e rappresenta il percorso previsto per la posa del sottoservizio.';
+    const maxW=310, words=note.split(/\s+/);
+    let line='', yy=top+25;
+    for(const word of words){
+      const test=line?line+' '+word:word;
+      if(c.measureText(test).width>maxW && line){
+        c.fillText(line,941,yy); yy+=20; line=word;
+        if(yy>H-8) break;
+      }else line=test;
+    }
+    if(line && yy<=H-8) c.fillText(line,941,yy);
+
+    const a=document.createElement('a');
+    a.download='ScavoFoto_'+new Date().toISOString().slice(0,10)+'.jpg';
+    a.href=out.toDataURL('image/jpeg',0.96);
+    a.click();
+    say('Tavola JPG creata.');
+  }catch(e){
+    console.error(e);
+    say('Errore durante il salvataggio JPG: '+e.message);
+  }
 }
 
 function clearAll(){
