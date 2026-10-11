@@ -428,7 +428,7 @@ function exportJpg(){
   if(!img){say('Carica prima una foto.');return}
   try{
     const sourceW=canvas.width, sourceH=canvas.height;
-    const W=1280, headerH=96, footerH=202;
+    const W=1600, headerH=120, footerH=360;
     const scale=W/sourceW, photoH=Math.round(sourceH*scale);
     const footerY=headerH+photoH, H=footerY+footerH;
     const out=document.createElement('canvas');
@@ -446,18 +446,18 @@ function exportJpg(){
     c.beginPath(); c.moveTo(metaX,1); c.lineTo(metaX,headerH-1); c.stroke();
     c.fillStyle='#ffffff'; c.fillRect(metaX+2,3,W-metaX-4,headerH-6);
     c.fillStyle='#111111'; c.textAlign='left';
-    c.font='bold 30px Arial';
-    c.fillText('TRACCIA SCAVO – PLANIMETRIA SU FOTO',25,48);
+    c.font='bold 38px Arial';
+    c.fillText('TRACCIA SCAVO – PLANIMETRIA SU FOTO',25,58);
     const date=(captureDate||new Date()).toLocaleDateString('it-IT');
     c.fillStyle='#111111';
-    c.font='bold 16px Arial'; c.fillText('DATA RILIEVO FOTO:',930,34);
-    c.font='bold 16px Arial'; c.fillText(date,1090,34);
-    c.font='bold 16px Arial'; c.fillText('OGGETTO:',930,68);
-    c.font='bold 16px Arial';
+    c.font='bold 22px Arial'; c.fillText('DATA RILIEVO FOTO:',930,42);
+    c.font='bold 22px Arial'; c.fillText(date,1090,42);
+    c.font='bold 32px Arial'; c.fillText('OGGETTO:',930,76);
+    c.font='bold 32px Arial';
     const job=document.getElementById('job').value.trim();
     c.fillText((job||'Scavo per posa sottoservizi').slice(0,23),1020,62);
-    c.font='bold 14px Arial'; c.fillText('COD. ORDINE:',930,87);
-    c.font='14px Arial';
+    c.font='bold 22px Arial'; c.fillText('COD. ORDINE:',930,108);
+    c.font='bold 22px Arial';
     const orderCode=document.getElementById('orderCode').value.trim()||'Non specificato';
     c.fillText(orderCode.slice(0,24),1035,87);
 
@@ -480,8 +480,8 @@ function exportJpg(){
       if(marks.end)route[route.length-1]={x:marks.end.x,y:marks.end.y};
       c.beginPath();c.moveTo(X(route[0]),Y(route[0]));
       for(let i=1;i<route.length;i++)c.lineTo(X(route[i]),Y(route[i]));
-      c.lineCap='round';c.lineJoin='round';c.strokeStyle='#fff';c.lineWidth=15;c.stroke();
-      c.strokeStyle='#00a51c';c.lineWidth=16;c.stroke();
+      c.lineCap='round';c.lineJoin='round';c.strokeStyle='#ffffff';c.lineWidth=24;c.stroke();
+      c.strokeStyle='#00a51c';c.lineWidth=12;c.stroke();
     }
 
     function coord(g){
@@ -550,11 +550,11 @@ function exportJpg(){
     const top=footerY+37;
 
     // Legenda
-    c.fillStyle='#111111'; c.font='bold 21px Arial'; c.fillText('LEGENDA',28,top);
+    c.fillStyle='#111111'; c.font='bold 32px Arial'; c.fillText('LEGENDA',28,top);
     c.fillRect(28,top+8,120,3);
-    c.strokeStyle='#008f19'; c.lineWidth=16;
+    c.strokeStyle='#008f19'; c.lineWidth=20;
     c.beginPath(); c.moveTo(29,top+22); c.lineTo(110,top+22); c.stroke();
-    c.font='bold 16px Arial'; c.fillStyle='#111111';
+    c.font='bold 28px Arial'; c.fillStyle='#111111';
     c.fillText('Traccia scavo',131,top+27);
     function legendDot(y){
       c.beginPath(); c.arc(69,y,20,0,Math.PI*2);
@@ -563,38 +563,38 @@ function exportJpg(){
       c.beginPath(); c.arc(69,y,22,0,Math.PI*2);
       c.lineWidth=1; c.strokeStyle='#555'; c.stroke();
     }
-    legendDot(top+49); c.fillStyle='#111'; c.fillText('Inizio scavo (coordinate GPS)',131,top+54);
-    legendDot(top+76); c.fillText('Fine scavo (posizione manuale)',131,top+81);
+    legendDot(top+65); c.fillStyle='#111'; c.fillText('Inizio scavo (coordinate GPS)',131,top+74);
+    legendDot(top+112); c.fillText('Fine scavo (posizione manuale)',131,top+121);
 
     // Coordinate GPS
-    c.font='bold 21px Arial'; c.fillStyle='#111111';
+    c.font='bold 30px Arial'; c.fillStyle='#111111';
     c.fillText('COORDINATE GPS',449,top); c.fillRect(449,top+8,210,3);
     function coordinateRow(label,g,y){
-      c.font='bold 16px Arial'; c.fillText(label,449,y);
-      c.font='bold 16px Arial';
+      c.font='bold 25px Arial'; c.fillText(label,449,y);
+      c.font='bold 25px Arial';
       const value=g
         ? coord(g.lat)+'° N     '+coord(g.lon)+'° E'
         : 'Non rilevate';
       c.fillText(value,585,y);
     }
     coordinateRow('Inizio scavo:',gpsData.start,top+36);
-    c.font='bold 15px Arial';
+    c.font='bold 24px Arial';
     const gpsAddress=(gpsData.start&&gpsData.start.address)||'Indirizzo non disponibile';
-    const addressWords=('Indirizzo: '+gpsAddress).split(/\s+/); let addressLine='',addressY=top+62;
-    for(const word of addressWords){const test=addressLine?addressLine+' '+word:word;if(c.measureText(test).width>430&&addressLine){c.fillText(addressLine,449,addressY);addressY+=20;addressLine=word;}else addressLine=test;}
+    const addressWords=('Indirizzo: '+gpsAddress).split(/\s+/); let addressLine='',addressY=top+100;
+    for(const word of addressWords){const test=addressLine?addressLine+' '+word:word;if(c.measureText(test).width>430&&addressLine){c.fillText(addressLine,449,addressY);addressY+=30;addressLine=word;}else addressLine=test;}
     if(addressLine&&addressY< H-8)c.fillText(addressLine,449,addressY);
 
     // Note con testo a capo
-    c.font='bold 21px Arial'; c.fillStyle='#111111'; c.fillText('NOTE',941,top); c.fillRect(941,top+8,68,3);
-    c.font='bold 15px Arial';
+    c.font='bold 30px Arial'; c.fillStyle='#111111'; c.fillText('NOTE',941,top); c.fillRect(941,top+8,68,3);
+    c.font='bold 24px Arial';
     const note=document.getElementById('notes').value.trim()
       ||'La traccia dello scavo è indicativa e rappresenta il percorso previsto per la posa del sottoservizio.';
-    const maxW=310, words=note.split(/\s+/);
+    const maxW=390, words=note.split(/\s+/);
     let line='', yy=top+25;
     for(const word of words){
       const test=line?line+' '+word:word;
       if(c.measureText(test).width>maxW && line){
-        c.fillText(line,941,yy); yy+=20; line=word;
+        c.fillText(line,941,yy); yy+=30; line=word;
         if(yy>H-8) break;
       }else line=test;
     }
