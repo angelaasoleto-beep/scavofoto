@@ -45,6 +45,8 @@ button.red{background:#d93648}
 </section>
 <section id="liveApp" hidden>
 <section class="card"><h2>Scavo Live — dati cantiere</h2>
+<label for="liveCluster">Cluster</label><select id="liveCluster"><option value="">Seleziona cluster</option><option value="A&B">A&B</option><option value="C&D">C&D</option><option value="AGF">AGF</option></select>
+<label for="liveCategory" id="liveCategoryLabel" hidden>Categoria A&B</label><select id="liveCategory" hidden><option value="">Seleziona categoria</option><option value="MILANO">MILANO</option><option value="HINTERLAND">HINTERLAND</option></select>
 <label for="liveOrder">Codice ordine</label><input id="liveOrder" type="text" placeholder="Inserisci il codice ordine">
 <label for="liveAddress">Indirizzo</label><input id="liveAddress" type="text" placeholder="Via, numero civico, comune">
 <label for="liveDate">Data lavorazione</label><input id="liveDate" type="date">
@@ -54,7 +56,7 @@ button.red{background:#d93648}
 <div id="livePhotoFields"></div>
 </section>
 <section class="card"><h2>Foto aggiuntive (facoltative)</h2><input id="extraLivePhotos" type="file" accept="image/*" multiple><button onclick="document.getElementById('extraLivePhotos').click()">Aggiungi foto</button><div id="extraLiveList" class="small"></div></section>
-<section class="card"><button onclick="makeLivePdf()">📄 Crea PDF Scavo Live</button><button class="secondary" onclick="backHome()">Torna alla scelta</button><p id="liveStatus" class="small" role="status"></p></section>
+<section class="card"><button onclick="makeLivePdf()">📄 Crea PDF Scavo Live</button><button id="approveEmailBtn" onclick="approveAndPrepareEmail()" hidden>✅ Approva e prepara e-mail</button><button class="secondary" onclick="backHome()">Torna alla scelta</button><p id="liveStatus" class="small" role="status"></p><p id="emailHelp" class="small" hidden></p></section>
 </section>
 <div id="requestApp" hidden>
 <section class="card">
@@ -126,9 +128,20 @@ button.red{background:#d93648}
 function openSection(id){document.getElementById('homeMenu').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('liveApp').hidden=true;document.getElementById(id).hidden=false;if(id==='liveApp'&&!document.getElementById('liveDate').value)document.getElementById('liveDate').value=new Date().toISOString().slice(0,10)}
 function backHome(){document.getElementById('liveApp').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('homeMenu').hidden=false}
 const liveKinds=[['before','Foto prima dello scavo',true],['open','Foto scavo aperto',true],['depth','Profondità scavo (8–15 cm)',true],['finish','Fine scavo',true]];
-const livePhotos={};let extraPhotos=[];
+const livePhotos={};let extraPhotos=[];let preparedPdfBlob=null;let preparedPdfName='';
 function buildLiveFields(){const root=document.getElementById('livePhotoFields');root.innerHTML='';liveKinds.forEach(([id,label])=>{const d=document.createElement('div');d.className='info';d.innerHTML=`<strong>${label}</strong><input type="file" accept="image/*" capture="environment" id="cam_${id}"><input type="file" accept="image/*" id="gal_${id}"><button type="button" id="btncam_${id}">📷 Scatta</button><button type="button" class="secondary" id="btngal_${id}">🖼️ Galleria</button><div id="state_${id}" class="small">Foto non caricata</div>`;d.querySelector('#btncam_'+id).onclick=()=>document.getElementById('cam_'+id).click();d.querySelector('#btngal_'+id).onclick=()=>document.getElementById('gal_'+id).click();root.appendChild(d);['cam_','gal_'].forEach(pre=>document.getElementById(pre+id).addEventListener('change',e=>{if(e.target.files[0])loadLivePhoto(id,e.target.files[0],label)}))})}
 function liveMsg(t){document.getElementById('liveStatus').textContent=t}
+document.getElementById('liveCluster').addEventListener('change',()=>{const ab=document.getElementById('liveCluster').value==='A&B';document.getElementById('liveCategory').hidden=!ab;document.getElementById('liveCategoryLabel').hidden=!ab;if(!ab)document.getElementById('liveCategory').value='';});
+function recipientForLive(){const cluster=document.getElementById('liveCluster').value,cat=document.getElementById('liveCategory').value;if(cluster==='A&B'){if(cat==='MILANO')return 'attivazionisoleto.gpon@soletospa.it';if(cat==='HINTERLAND')return 'hinterland@soletospa.it';return '';}if(cluster==='C&D')return 'deliveryced@soletospa.it';if(cluster==='AGF')return 'hinterland@soletospa.it';return '';}
+async function approveAndPrepareEmail(){
+ const to=recipientForLive();if(!to){liveMsg('Seleziona il cluster e, per A&B, anche la categoria.');return}if(!preparedPdfBlob){liveMsg('Prima crea il PDF.');return}
+ const order=document.getElementById('liveOrder').value.trim(),address=document.getElementById('liveAddress').value.trim();
+ const subject=order+' - '+address,body='A voi le immagini con i dettagli dello scavo.\n\nSaluti';
+ const mailto='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+ document.getElementById('emailHelp').hidden=false;document.getElementById('emailHelp').textContent='Si aprirà la tua app e-mail. Per allegare il PDF, seleziona il file appena salvato/condiviso: il sito GitHub Pages non può allegare o inviare file automaticamente senza un servizio e-mail sicuro.';
+ await deliverGeneratedFile(preparedPdfBlob,preparedPdfName,'application/pdf');window.location.href=mailto;
+ liveMsg('Documento approvato. Si sta aprendo la bozza e-mail: allega il PDF prima di inviare.');
+}
 async function reverseAddress(lat,lon){const r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+lat+'&lon='+lon);if(!r.ok)throw Error('Indirizzo non disponibile');const j=await r.json();if(!j.display_name)throw Error('Indirizzo non trovato');return j.display_name}
 async function loadLivePhoto(id,file,label){
  if(!file)return;
@@ -196,6 +209,7 @@ async function deliverGeneratedFile(blob, filename, mimeType){
 async function makeLivePdf(){
  const order=document.getElementById('liveOrder').value.trim(),address=document.getElementById('liveAddress').value.trim(),date=document.getElementById('liveDate').value;
  if(!order||!address||!date){liveMsg('Compila codice ordine, indirizzo e data lavorazione.');return}
+ if(!recipientForLive()){liveMsg('Seleziona il cluster e, per A&B, la categoria corretta.');return}
  if(liveKinds.some(([id])=>!livePhotos[id])){liveMsg('Mancano una o più foto obbligatorie.');return}
  if(!window.jspdf){liveMsg('Impossibile caricare il creatore PDF: controlla la connessione.');return}
  const {jsPDF}=window.jspdf,pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}),all=liveKinds.map(([id,label])=>({...livePhotos[id],label})).concat(extraPhotos);
@@ -212,7 +226,7 @@ async function makeLivePdf(){
   }
   const data=c.toDataURL('image/jpeg',.92),props=pdf.getImageProperties(data),scale=Math.min(190/props.width,277/props.height),w=props.width*scale,h=props.height*scale;pdf.addImage(data,'JPEG',(210-w)/2,10,w,h);
  }
- const safe=(order+'_'+address).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'');const filename=safe+'.pdf';const blob=pdf.output('blob');const delivery=await deliverGeneratedFile(blob,filename,'application/pdf');liveMsg(delivery==='cancelled'?'Condivisione annullata. Puoi premere di nuovo per salvare il PDF.':'PDF pronto ('+all.length+' foto). Su iPhone, se si apre l’anteprima, tocca Condividi e poi “Salva su File”.')
+ const safe=(order+'_'+address).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'');const filename=safe+'.pdf';const blob=pdf.output('blob');preparedPdfBlob=blob;preparedPdfName=filename;document.getElementById('approveEmailBtn').hidden=false;const delivery=await deliverGeneratedFile(blob,filename,'application/pdf');liveMsg(delivery==='cancelled'?'Condivisione annullata. Il PDF è pronto: premi di nuovo Crea PDF per riprovare.':'PDF pronto ('+all.length+' foto). Controlla il documento; quando sei pronto, premi “Approva e prepara e-mail”.')
 }
 buildLiveFields();
 const canvas=document.getElementById('canvas');
@@ -477,23 +491,66 @@ function exportJpg(){
       if(marks.end)route[route.length-1]={x:marks.end.x,y:marks.end.y};
       c.beginPath();c.moveTo(X(route[0]),Y(route[0]));
       for(let i=1;i<route.length;i++)c.lineTo(X(route[i]),Y(route[i]));
-      c.lineCap='round';c.lineJoin='round';c.strokeStyle='#fff';c.lineWidth=15;c.stroke();
-      c.strokeStyle='#00a51c';c.lineWidth=16;c.stroke();
+      c.lineCap='round';c.lineJoin='round';
+      // Bordo bianco nettamente più largo del verde: resta visibile su entrambi i lati.
+      c.strokeStyle='#ffffff';c.lineWidth=30;c.stroke();
+      c.strokeStyle='#00a51c';c.lineWidth=14;c.stroke();
     }
 
     function coord(g){
       if(!g) return 'Non rilevate';
       return g.toFixed ? g.toFixed(5).replace('.',',') : '';
     }
+    const placedCallouts=[];
     function callout(key,title){
       const p=marks[key], g=key==='start'?gpsData.start:null;
       if(!p) return;
       const px=X(p), py=Y(p);
       const boxW=735, boxH=key==='start'?324:183;
-      let bx=key==='start'?px+42:px-boxW-35;
-      let by=py-boxH-30;
-      bx=Math.max(8,Math.min(W-boxW-8,bx));
-      by=Math.max(headerH+8,Math.min(footerY-boxH-8,by));
+      const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+      const overlaps=(r,q)=>r.x<q.x+q.w+18 && r.x+r.w+18>q.x && r.y<q.y+q.h+18 && r.y+r.h+18>q.y;
+      // Prova posizioni intorno al punto; accetta solo riquadri che non intersecano gli altri.
+      // Preferisce le fasce alte/basse della fotografia, lontane dal tracciato.
+      // Le posizioni vengono valutate prima di disegnare i banner.
+      const candidates=[
+        {x:8,y:headerH+12},{x:W-boxW-8,y:headerH+12},
+        {x:(W-boxW)/2,y:headerH+12},
+        {x:8,y:footerY-boxH-12},{x:W-boxW-8,y:footerY-boxH-12},
+        {x:(W-boxW)/2,y:footerY-boxH-12},
+        {x:px+48,y:py-boxH-70},{x:px-boxW-48,y:py-boxH-70},
+        {x:px+48,y:py+70},{x:px-boxW-48,y:py+70},
+        {x:px-boxW/2,y:py-boxH-90},{x:px-boxW/2,y:py+90}
+      ];
+      let chosen=null, bestScore=Infinity;
+      for(const candidate of candidates){
+        const r={x:clamp(candidate.x,8,W-boxW-8),y:clamp(candidate.y,headerH+8,footerY-boxH-8),w:boxW,h:boxH};
+        if(placedCallouts.some(q=>overlaps(r,q))) continue;
+        const centerX=r.x+boxW/2, centerY=r.y+boxH/2;
+        // Penalizza banner vicini ai punti e soprattutto quelli che coprono il percorso.
+        let routePenalty=0;
+        const pad=34;
+        for(const pt of route){
+          const rx=X(pt), ry=Y(pt);
+          if(rx>=r.x-pad&&rx<=r.x+r.w+pad&&ry>=r.y-pad&&ry<=r.y+r.h+pad){
+            routePenalty+=1200;
+          }
+        }
+        const pointDistance=Math.min(
+          Math.hypot(centerX-px,centerY-py),
+          ...['start','end'].filter(k=>marks[k]).map(k=>Math.hypot(centerX-X(marks[k]),centerY-Y(marks[k])))
+        );
+        const score=routePenalty + 8000/(pointDistance+1) + Math.hypot(centerX-px,centerY-py)*0.15;
+        if(score<bestScore){chosen=r;bestScore=score;}
+      }
+      // In foto molto piccole prova comunque tutte le zone; non riutilizzare mai la stessa area.
+      if(!chosen){
+        const step=24;
+        outer: for(let y=headerH+8;y<=footerY-boxH-8;y+=step){
+          for(let x=8;x<=W-boxW-8;x+=step){const r={x,y,w:boxW,h:boxH};if(!placedCallouts.some(q=>overlaps(r,q))){chosen=r;break outer;}}
+        }
+      }
+      if(!chosen) return;
+      const bx=chosen.x, by=chosen.y; placedCallouts.push(chosen);
       c.fillStyle='#fff'; c.fillRect(bx,by,boxW,boxH);
       c.strokeStyle='#ff1717'; c.lineWidth=2; c.strokeRect(bx,by,boxW,boxH);
       c.fillStyle='#ff1717'; c.fillRect(bx,by,boxW,69);
