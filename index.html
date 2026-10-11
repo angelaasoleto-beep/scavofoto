@@ -39,14 +39,19 @@ button.red{background:#d93648}
 </header>
 <main>
 <section class="card" id="homeMenu">
-<h2>Scegli la funzione</h2>
+<h2>1. Seleziona il cluster</h2>
+<label for="globalCluster">Cluster</label>
+<select id="globalCluster"><option value="">Seleziona cluster</option><option value="A&B">A&B</option><option value="C&D">C&D</option><option value="AGF">AGF</option></select>
+<label for="globalCategory" id="globalCategoryLabel" hidden>Categoria A&B</label>
+<select id="globalCategory" hidden><option value="">Seleziona categoria</option><option value="MILANO">MILANO</option><option value="HINTERLAND">HINTERLAND</option></select>
+<p class="small">La scelta del cluster vale sia per Richiesta scavo sia per Scavo Live.</p>
+<h2>2. Scegli la funzione</h2>
 <button onclick="openSection('requestApp')">📋 Richiesta scavo</button>
 <button onclick="openSection('liveApp')">📸 Scavo Live</button>
+<p id="clusterStatus" class="small" role="status"></p>
 </section>
 <section id="liveApp" hidden>
 <section class="card"><h2>Scavo Live — dati cantiere</h2>
-<label for="liveCluster">Cluster</label><select id="liveCluster"><option value="">Seleziona cluster</option><option value="A&B">A&B</option><option value="C&D">C&D</option><option value="AGF">AGF</option></select>
-<label for="liveCategory" id="liveCategoryLabel" hidden>Categoria A&B</label><select id="liveCategory" hidden><option value="">Seleziona categoria</option><option value="MILANO">MILANO</option><option value="HINTERLAND">HINTERLAND</option></select>
 <label for="liveOrder">Codice ordine</label><input id="liveOrder" type="text" placeholder="Inserisci il codice ordine">
 <label for="liveAddress">Indirizzo</label><input id="liveAddress" type="text" placeholder="Via, numero civico, comune">
 <label for="liveDate">Data lavorazione</label><input id="liveDate" type="date">
@@ -118,6 +123,8 @@ button.red{background:#d93648}
 <input id="tableName" type="text" placeholder="Es. Scavo_Via_Roma_01" value="ScavoFoto">
 <p class="small">Il nome verrà usato per il file JPG salvato.</p>
 <button onclick="exportJpg()">⬇ Salva tavola JPG</button>
+<button id="requestApproveBtn" onclick="approveRequestEmail()">✅ Approva e invia e-mail</button>
+<p id="requestEmailStatus" class="small" role="status">Dopo aver preparato il JPG, approva l'invio. Per l'invio automatico serve collegare un servizio e-mail sicuro.</p>
 <button class="secondary" onclick="clearAll()">Nuovo rilievo</button>
 </section>
 </div>
@@ -125,22 +132,32 @@ button.red{background:#d93648}
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
 'use strict';
-function openSection(id){document.getElementById('homeMenu').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('liveApp').hidden=true;document.getElementById(id).hidden=false;if(id==='liveApp'&&!document.getElementById('liveDate').value)document.getElementById('liveDate').value=new Date().toISOString().slice(0,10)}
+function openSection(id){document.getElementById('homeMenu').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('liveApp').hidden=true;document.getElementById(id).hidden=false;if(!checkCluster()){document.getElementById('homeMenu').hidden=false;document.getElementById('requestApp').hidden=true;document.getElementById('liveApp').hidden=true;return}if(id==='liveApp'&&!document.getElementById('liveDate').value)document.getElementById('liveDate').value=new Date().toISOString().slice(0,10)}
 function backHome(){document.getElementById('liveApp').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('homeMenu').hidden=false}
 const liveKinds=[['before','Foto prima dello scavo',true],['open','Foto scavo aperto',true],['depth','Profondità scavo (8–15 cm)',true],['finish','Fine scavo',true]];
 const livePhotos={};let extraPhotos=[];let preparedPdfBlob=null;let preparedPdfName='';
 function buildLiveFields(){const root=document.getElementById('livePhotoFields');root.innerHTML='';liveKinds.forEach(([id,label])=>{const d=document.createElement('div');d.className='info';d.innerHTML=`<strong>${label}</strong><input type="file" accept="image/*" capture="environment" id="cam_${id}"><input type="file" accept="image/*" id="gal_${id}"><button type="button" id="btncam_${id}">📷 Scatta</button><button type="button" class="secondary" id="btngal_${id}">🖼️ Galleria</button><div id="state_${id}" class="small">Foto non caricata</div>`;d.querySelector('#btncam_'+id).onclick=()=>document.getElementById('cam_'+id).click();d.querySelector('#btngal_'+id).onclick=()=>document.getElementById('gal_'+id).click();root.appendChild(d);['cam_','gal_'].forEach(pre=>document.getElementById(pre+id).addEventListener('change',e=>{if(e.target.files[0])loadLivePhoto(id,e.target.files[0],label)}))})}
 function liveMsg(t){document.getElementById('liveStatus').textContent=t}
-document.getElementById('liveCluster').addEventListener('change',()=>{const ab=document.getElementById('liveCluster').value==='A&B';document.getElementById('liveCategory').hidden=!ab;document.getElementById('liveCategoryLabel').hidden=!ab;if(!ab)document.getElementById('liveCategory').value='';});
-function recipientForLive(){const cluster=document.getElementById('liveCluster').value,cat=document.getElementById('liveCategory').value;if(cluster==='A&B'){if(cat==='MILANO')return 'attivazionisoleto.gpon@soletospa.it';if(cat==='HINTERLAND')return 'hinterland@soletospa.it';return '';}if(cluster==='C&D')return 'deliveryced@soletospa.it';if(cluster==='AGF')return 'hinterland@soletospa.it';return '';}
+document.getElementById('globalCluster').addEventListener('change',()=>{const ab=document.getElementById('globalCluster').value==='A&B';document.getElementById('globalCategory').hidden=!ab;document.getElementById('globalCategoryLabel').hidden=!ab;if(!ab)document.getElementById('globalCategory').value='';});
+function selectedRecipient(){const cluster=document.getElementById('globalCluster').value,cat=document.getElementById('globalCategory').value;if(cluster==='A&B'){if(cat==='MILANO')return 'attivazionisoleto.gpon@soletospa.it';if(cat==='HINTERLAND')return 'hinterland@soletospa.it';return '';}if(cluster==='C&D')return 'deliveryced@soletospa.it';if(cluster==='AGF')return 'hinterland@soletospa.it';return '';}
+function recipientForLive(){return selectedRecipient();}
+function checkCluster(){if(!selectedRecipient()){document.getElementById('clusterStatus').textContent='Seleziona un cluster e, per A&B, anche MILANO o HINTERLAND.';return false;}document.getElementById('clusterStatus').textContent='Cluster selezionato: '+document.getElementById('globalCluster').value+(document.getElementById('globalCategory').hidden?'':' · '+document.getElementById('globalCategory').value);return true;}
+async function approveRequestEmail(){
+ const to=selectedRecipient();if(!to){document.getElementById('requestEmailStatus').textContent='Seleziona prima il cluster nella schermata iniziale.';return;}
+ const order=document.getElementById('orderCode').value.trim(),address=document.getElementById('job').value.trim();
+ if(!order||!address){document.getElementById('requestEmailStatus').textContent='Inserisci codice ordine e indirizzo prima di approvare.';return;}
+ document.getElementById('requestEmailStatus').textContent='Approvazione registrata. Per inviare automaticamente il JPG come allegato è necessario configurare il servizio e-mail sicuro; questa pagina da sola non può inviare allegati automaticamente.';
+ const subject=order+' - '+address,body='A voi le immagini con i dettagli dello scavo.\n\nSaluti';
+ window.location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+}
 async function approveAndPrepareEmail(){
- const to=recipientForLive();if(!to){liveMsg('Seleziona il cluster e, per A&B, anche la categoria.');return}if(!preparedPdfBlob){liveMsg('Prima crea il PDF.');return}
+ const to=recipientForLive();if(!to){liveMsg('Seleziona prima il cluster nella schermata iniziale e, per A&B, la categoria.');return}if(!preparedPdfBlob){liveMsg('Prima crea il PDF.');return}
  const order=document.getElementById('liveOrder').value.trim(),address=document.getElementById('liveAddress').value.trim();
  const subject=order+' - '+address,body='A voi le immagini con i dettagli dello scavo.\n\nSaluti';
  const mailto='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
- document.getElementById('emailHelp').hidden=false;document.getElementById('emailHelp').textContent='Si aprirà la tua app e-mail. Per allegare il PDF, seleziona il file appena salvato/condiviso: il sito GitHub Pages non può allegare o inviare file automaticamente senza un servizio e-mail sicuro.';
+ document.getElementById('emailHelp').hidden=false;document.getElementById('emailHelp').textContent='Per l’invio automatico del PDF come allegato serve collegare un servizio e-mail sicuro: GitHub Pages da solo non può inviare allegati.';
  await deliverGeneratedFile(preparedPdfBlob,preparedPdfName,'application/pdf');window.location.href=mailto;
- liveMsg('Documento approvato. Si sta aprendo la bozza e-mail: allega il PDF prima di inviare.');
+ liveMsg('Documento approvato. Si apre la bozza e-mail; per l’invio automatico con allegato va configurato un servizio e-mail sicuro.');
 }
 async function reverseAddress(lat,lon){const r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+lat+'&lon='+lon);if(!r.ok)throw Error('Indirizzo non disponibile');const j=await r.json();if(!j.display_name)throw Error('Indirizzo non trovato');return j.display_name}
 async function loadLivePhoto(id,file,label){
