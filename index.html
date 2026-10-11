@@ -25,9 +25,9 @@ button.red{background:#d93648}
 .small{font-size:13px;color:#62798a;line-height:1.6}
 #status{padding:12px;background:#e8f6ff;border-radius:8px;color:#075985;overflow-wrap:anywhere}
 #canvas{display:block;width:100%;height:auto;background:#e8f6ff;border:1px solid #d3e9f5;border-radius:9px;touch-action:none}
-.info{padding:12px;background:#f2f9fe;border:1px solid #dcecf5;border-radius:9px;margin-top:10px;overflow-wrap:anywhere}
-.info strong{display:block;color:#087db5;font-size:11px;margin-bottom:6px}
-.info span{font-size:14px;line-height:1.6;white-space:pre-wrap}
+.info{padding:24px;background:#f2f9fe;border:1px solid #dcecf5;border-radius:9px;margin-top:10px;overflow-wrap:anywhere}
+.info strong{display:block;color:#087db5;font-size:22px;font-weight:900;margin-bottom:12px}
+.info span{font-size:28px;font-weight:800;line-height:1.6;white-space:pre-wrap}
 @media(max-width:520px){main{padding:10px}.card{padding:14px}button,.filelabel{flex:1 1 auto;text-align:center}}
 </style>
 </head>
@@ -161,6 +161,38 @@ async function loadLivePhoto(id,file,label){
  },e=>{liveMsg('Foto selezionata ma non geolocalizzata. Attiva la posizione e autorizza il browser, poi seleziona di nuovo la foto.');}, {enableHighAccuracy:false,timeout:10000,maximumAge:60000});
 }
 document.getElementById('extraLivePhotos').addEventListener('change',e=>Array.from(e.target.files).forEach(f=>loadLivePhoto('extra',f,'Foto aggiuntiva')));
+async function deliverGeneratedFile(blob, filename, mimeType){
+  // Su iPhone/iPad è più affidabile aprire il foglio Condividi di iOS.
+  try {
+    const file = new File([blob], filename, {type:mimeType});
+    if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
+      await navigator.share({files:[file], title:filename});
+      return 'shared';
+    }
+  } catch(err) {
+    if (err && err.name === 'AbortError') return 'cancelled';
+    // Se la condivisione non è disponibile, passa al metodo alternativo.
+  }
+  const url=URL.createObjectURL(blob);
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  if(isIOS){
+    const opened=window.open(url,'_blank');
+    if(!opened){
+      const old=document.getElementById('downloadFallback'); if(old)old.remove();
+      const box=document.createElement('div'); box.id='downloadFallback'; box.className='info';
+      box.innerHTML='<strong>FILE PRONTO</strong><span>Safari ha bloccato l’apertura automatica. Tocca il link qui sotto, poi usa Condividi → Salva su File.</span>';
+      const a=document.createElement('a'); a.href=url; a.target='_blank'; a.rel='noopener'; a.textContent='Apri '+filename; a.style.display='block'; a.style.padding='10px 0'; a.style.overflowWrap='anywhere';
+      box.appendChild(a); document.body.appendChild(box); box.scrollIntoView({behavior:'smooth',block:'center'});
+    }
+    // Non revocare subito: Safari potrebbe dover ancora aprire il file.
+    setTimeout(()=>URL.revokeObjectURL(url),120000);
+    return 'opened';
+  }
+  const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+  return 'downloaded';
+}
+
 async function makeLivePdf(){
  const order=document.getElementById('liveOrder').value.trim(),address=document.getElementById('liveAddress').value.trim(),date=document.getElementById('liveDate').value;
  if(!order||!address||!date){liveMsg('Compila codice ordine, indirizzo e data lavorazione.');return}
@@ -180,7 +212,7 @@ async function makeLivePdf(){
   }
   const data=c.toDataURL('image/jpeg',.92),props=pdf.getImageProperties(data),scale=Math.min(190/props.width,277/props.height),w=props.width*scale,h=props.height*scale;pdf.addImage(data,'JPEG',(210-w)/2,10,w,h);
  }
- const safe=(order+'_'+address).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'');pdf.save(safe+'.pdf');liveMsg('PDF creato con la geolocalizzazione sovr impressa sulle foto. Foto incluse: '+all.length)
+ const safe=(order+'_'+address).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'');const filename=safe+'.pdf';const blob=pdf.output('blob');const delivery=await deliverGeneratedFile(blob,filename,'application/pdf');liveMsg(delivery==='cancelled'?'Condivisione annullata. Puoi premere di nuovo per salvare il PDF.':'PDF pronto ('+all.length+' foto). Su iPhone, se si apre l’anteprima, tocca Condividi e poi “Salva su File”.')
 }
 buildLiveFields();
 const canvas=document.getElementById('canvas');
@@ -287,7 +319,7 @@ function paint(c){
  if(s.length<2)continue;
  c.beginPath();c.moveTo(s[0].x*sx,s[0].y*sy);
  for(let i=1;i<s.length;i++)c.lineTo(s[i].x*sx,s[i].y*sy);
- c.strokeStyle='#00df65';c.lineWidth=Math.max(8,w/90);
+ c.strokeStyle='#00df65';c.lineWidth=Math.max(16,w/45);
  c.lineCap='round';c.lineJoin='round';c.stroke();
  }
  for(const k of ['start','end']){
@@ -449,7 +481,7 @@ function exportJpg(){
       c.beginPath();c.moveTo(X(route[0]),Y(route[0]));
       for(let i=1;i<route.length;i++)c.lineTo(X(route[i]),Y(route[i]));
       c.lineCap='round';c.lineJoin='round';c.strokeStyle='#fff';c.lineWidth=15;c.stroke();
-      c.strokeStyle='#00a51c';c.lineWidth=8;c.stroke();
+      c.strokeStyle='#00a51c';c.lineWidth=16;c.stroke();
     }
 
     function coord(g){
@@ -460,37 +492,37 @@ function exportJpg(){
       const p=marks[key], g=key==='start'?gpsData.start:null;
       if(!p) return;
       const px=X(p), py=Y(p);
-      const boxW=245, boxH=key==='start'?108:61;
+      const boxW=735, boxH=key==='start'?324:183;
       let bx=key==='start'?px+42:px-boxW-35;
       let by=py-boxH-30;
       bx=Math.max(8,Math.min(W-boxW-8,bx));
       by=Math.max(headerH+8,Math.min(footerY-boxH-8,by));
       c.fillStyle='#fff'; c.fillRect(bx,by,boxW,boxH);
       c.strokeStyle='#ff1717'; c.lineWidth=2; c.strokeRect(bx,by,boxW,boxH);
-      c.fillStyle='#ff1717'; c.fillRect(bx,by,boxW,23);
-      c.fillStyle='#fff'; c.font='bold 15px Arial'; c.textAlign='left';
-      c.fillText(title,bx+10,by+16);
-      c.fillStyle='#111'; c.font='bold 13px Arial';
+      c.fillStyle='#ff1717'; c.fillRect(bx,by,boxW,69);
+      c.fillStyle='#fff'; c.font='bold 45px Arial'; c.textAlign='left';
+      c.fillText(title,bx+30,by+49);
+      c.fillStyle='#111'; c.font='bold 39px Arial';
       if(key==='start'){
-        c.fillText('Latitudine: '+(g?coord(g.lat):'Non rilevata'),bx+10,by+40);
-        c.fillText('Longitudine: '+(g?coord(g.lon):'Non rilevata'),bx+10,by+57);
-        c.font='12px Arial';
+        c.fillText('Latitudine: '+(g?coord(g.lat):'Non rilevata'),bx+30,by+120);
+        c.fillText('Longitudine: '+(g?coord(g.lon):'Non rilevata'),bx+30,by+171);
+        c.font='bold 36px Arial';
         const addr=(gpsData.start&&gpsData.start.address)||'Indirizzo non disponibile';
-        let line='',yy=by+73;const words=('Indirizzo: '+addr).split(/\s+/);
-        for(const word of words){const test=line?line+' '+word:word;if(c.measureText(test).width>boxW-18&&line){c.fillText(line,bx+10,yy);yy+=14;line=word;if(yy>by+101)break}else line=test;}
-        if(line&&yy<=by+101)c.fillText(line,bx+10,yy);
+        let line='',yy=by+222;const words=('Indirizzo: '+addr).split(/\s+/);
+        for(const word of words){const test=line?line+' '+word:word;if(c.measureText(test).width>boxW-60&&line){c.fillText(line,bx+30,yy);yy+=42;line=word;if(yy>by+300)break}else line=test;}
+        if(line&&yy<=by+300)c.fillText(line,bx+30,yy);
       }else{
-        c.fillText('Posizione manuale',bx+10,by+43);
+        c.fillText('Posizione manuale',bx+30,by+129);
       }
       const ax=Math.max(bx+12,Math.min(px,bx+boxW-12));
       const ay=py<by?by:by+boxH;
-      c.strokeStyle='#ff1717'; c.lineWidth=3;
+      c.strokeStyle='#ff1717'; c.lineWidth=6;
       c.beginPath(); c.moveTo(ax,ay); c.lineTo(px,py); c.stroke();
       const a=Math.atan2(py-ay,px-ax);
       c.fillStyle='#ff1717'; c.beginPath();
       c.moveTo(px,py);
-      c.lineTo(px-12*Math.cos(a-.45),py-12*Math.sin(a-.45));
-      c.lineTo(px-12*Math.cos(a+.45),py-12*Math.sin(a+.45));
+      c.lineTo(px-24*Math.cos(a-.45),py-24*Math.sin(a-.45));
+      c.lineTo(px-24*Math.cos(a+.45),py-24*Math.sin(a+.45));
       c.closePath(); c.fill();
     }
 
@@ -498,9 +530,9 @@ function exportJpg(){
     for(const key of ['start','end']){
       const p=marks[key]; if(!p) continue;
       const x=X(p), y=Y(p);
-      c.beginPath(); c.arc(x,y,12,0,Math.PI*2);
+      c.beginPath(); c.arc(x,y,24,0,Math.PI*2);
       c.fillStyle='#ff1717'; c.fill();
-      c.lineWidth=3; c.strokeStyle='#fff'; c.stroke();
+      c.lineWidth=6; c.strokeStyle='#fff'; c.stroke();
       c.lineWidth=1; c.strokeStyle='#222'; c.stroke();
     }
     callout('start','INIZIO SCAVO');
@@ -520,15 +552,15 @@ function exportJpg(){
     // Legenda
     c.fillStyle='#111111'; c.font='bold 21px Arial'; c.fillText('LEGENDA',28,top);
     c.fillRect(28,top+8,120,3);
-    c.strokeStyle='#008f19'; c.lineWidth=8;
+    c.strokeStyle='#008f19'; c.lineWidth=16;
     c.beginPath(); c.moveTo(29,top+22); c.lineTo(110,top+22); c.stroke();
     c.font='bold 16px Arial'; c.fillStyle='#111111';
     c.fillText('Traccia scavo',131,top+27);
     function legendDot(y){
-      c.beginPath(); c.arc(69,y,10,0,Math.PI*2);
+      c.beginPath(); c.arc(69,y,20,0,Math.PI*2);
       c.fillStyle='#ff1717'; c.fill(); c.lineWidth=3;
       c.strokeStyle='#fff'; c.stroke();
-      c.beginPath(); c.arc(69,y,11,0,Math.PI*2);
+      c.beginPath(); c.arc(69,y,22,0,Math.PI*2);
       c.lineWidth=1; c.strokeStyle='#555'; c.stroke();
     }
     legendDot(top+49); c.fillStyle='#111'; c.fillText('Inizio scavo (coordinate GPS)',131,top+54);
@@ -546,6 +578,11 @@ function exportJpg(){
       c.fillText(value,585,y);
     }
     coordinateRow('Inizio scavo:',gpsData.start,top+36);
+    c.font='bold 15px Arial';
+    const gpsAddress=(gpsData.start&&gpsData.start.address)||'Indirizzo non disponibile';
+    const addressWords=('Indirizzo: '+gpsAddress).split(/\s+/); let addressLine='',addressY=top+62;
+    for(const word of addressWords){const test=addressLine?addressLine+' '+word:word;if(c.measureText(test).width>430&&addressLine){c.fillText(addressLine,449,addressY);addressY+=20;addressLine=word;}else addressLine=test;}
+    if(addressLine&&addressY< H-8)c.fillText(addressLine,449,addressY);
 
     // Note con testo a capo
     c.font='bold 21px Arial'; c.fillStyle='#111111'; c.fillText('NOTE',941,top); c.fillRect(941,top+8,68,3);
@@ -563,13 +600,13 @@ function exportJpg(){
     }
     if(line && yy<=H-8) c.fillText(line,941,yy);
 
-    const a=document.createElement('a');
     const autoOrder=document.getElementById('orderCode').value.trim(); const autoAddress=document.getElementById('job').value.trim(); const requestedName=(autoOrder&&autoAddress?autoOrder+'_'+autoAddress:document.getElementById('tableName').value.trim())||'ScavoFoto';
     const safeName=requestedName.replace(/[\\\\/:*?"<>|]+/g,'_').replace(/\\s+/g,'_');
-    a.download=safeName.toLowerCase().endsWith('.jpg')?safeName:safeName+'.jpg';
-    a.href=out.toDataURL('image/jpeg',0.96);
-    a.click();
-    say('Tavola JPG creata.');
+    const filename=safeName.toLowerCase().endsWith('.jpg')?safeName:safeName+'.jpg';
+    out.toBlob(async blob=>{
+      if(!blob){say('Non riesco a preparare il JPG. Riprova.');return}
+      try{const delivery=await deliverGeneratedFile(blob,filename,'image/jpeg');say(delivery==='cancelled'?'Condivisione annullata. Premi di nuovo per salvare il JPG.':'JPG pronto. Su iPhone, scegli “Salva su File” dal menu Condividi se necessario.')}catch(err){say('File creato ma non aperto: '+err.message)}
+    },'image/jpeg',0.96);
   }catch(e){
     console.error(e);
     say('Errore durante il salvataggio JPG: '+e.message);
