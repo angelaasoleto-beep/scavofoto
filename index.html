@@ -132,7 +132,7 @@ button.red{background:#d93648}
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
 'use strict';
-function openSection(id){document.getElementById('homeMenu').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('liveApp').hidden=true;document.getElementById(id).hidden=false;if(!checkCluster()){document.getElementById('homeMenu').hidden=false;document.getElementById('requestApp').hidden=true;document.getElementById('liveApp').hidden=true;return}if(id==='liveApp'&&!document.getElementById('liveDate').value)document.getElementById('liveDate').value=new Date().toISOString().slice(0,10)}
+function openSection(id){document.getElementById('homeMenu').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('liveApp').hidden=true;document.getElementById(id).hidden=false;if(!checkCluster()){document.getElementById('homeMenu').hidden=false;document.getElementById('requestApp').hidden=true;document.getElementById('liveApp').hidden=true;return}if(id==='liveApp'&&!document.getElementById('liveDate').value){const d=new Date();document.getElementById('liveDate').value=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}}
 function backHome(){document.getElementById('liveApp').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('homeMenu').hidden=false}
 const liveKinds=[['before','Foto prima dello scavo',true],['open','Foto scavo aperto',true],['depth','Profondità scavo (8–15 cm)',true],['finish','Fine scavo',true]];
 const livePhotos={};let extraPhotos=[];let preparedPdfBlob=null;let preparedPdfName='';
@@ -146,7 +146,7 @@ async function approveRequestEmail(){
  const to=selectedRecipient();if(!to){document.getElementById('requestEmailStatus').textContent='Seleziona prima il cluster nella schermata iniziale.';return;}
  const order=document.getElementById('orderCode').value.trim(),address=document.getElementById('job').value.trim();
  if(!order||!address){document.getElementById('requestEmailStatus').textContent='Inserisci codice ordine e indirizzo prima di approvare.';return;}
- document.getElementById('requestEmailStatus').textContent='Approvazione registrata. Per inviare automaticamente il JPG come allegato è necessario configurare il servizio e-mail sicuro; questa pagina da sola non può inviare allegati automaticamente.';
+ document.getElementById('requestEmailStatus').textContent='Si apre una bozza e-mail. Allega manualmente il JPG salvato: questa pagina statica non può aggiungere allegati o inviare e-mail da sola.';
  const subject=order+' - '+address,body='A voi le immagini con i dettagli dello scavo.\n\nSaluti';
  window.location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
 }
@@ -156,8 +156,11 @@ async function approveAndPrepareEmail(){
  const subject=order+' - '+address,body='A voi le immagini con i dettagli dello scavo.\n\nSaluti';
  const mailto='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
  document.getElementById('emailHelp').hidden=false;document.getElementById('emailHelp').textContent='Per l’invio automatico del PDF come allegato serve collegare un servizio e-mail sicuro: GitHub Pages da solo non può inviare allegati.';
- await deliverGeneratedFile(preparedPdfBlob,preparedPdfName,'application/pdf');window.location.href=mailto;
- liveMsg('Documento approvato. Si apre la bozza e-mail; per l’invio automatico con allegato va configurato un servizio e-mail sicuro.');
+ const delivery=await deliverGeneratedFile(preparedPdfBlob,preparedPdfName,'application/pdf');
+ if(delivery==='cancelled'){liveMsg('Condivisione annullata. Il PDF resta pronto: riprova quando vuoi.');return}
+ document.getElementById('emailHelp').textContent='Il PDF è stato scaricato/condiviso. Nella bozza e-mail che si apre, verifica e allega il PDF se non è già allegato: questa pagina non può inviarlo automaticamente.';
+ window.location.href=mailto;
+ liveMsg('Si apre la bozza e-mail. Verifica che il PDF sia allegato prima di inviare.');
 }
 async function reverseAddress(lat,lon){const r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+lat+'&lon='+lon);if(!r.ok)throw Error('Indirizzo non disponibile');const j=await r.json();if(!j.display_name)throw Error('Indirizzo non trovato');return j.display_name}
 async function loadLivePhoto(id,file,label){
@@ -243,7 +246,7 @@ async function makeLivePdf(){
   }
   const data=c.toDataURL('image/jpeg',.92),props=pdf.getImageProperties(data),scale=Math.min(190/props.width,277/props.height),w=props.width*scale,h=props.height*scale;pdf.addImage(data,'JPEG',(210-w)/2,10,w,h);
  }
- const safe=(order+'_'+address).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'');const filename=safe+'.pdf';const blob=pdf.output('blob');preparedPdfBlob=blob;preparedPdfName=filename;document.getElementById('approveEmailBtn').hidden=false;const delivery=await deliverGeneratedFile(blob,filename,'application/pdf');liveMsg(delivery==='cancelled'?'Condivisione annullata. Il PDF è pronto: premi di nuovo Crea PDF per riprovare.':'PDF pronto ('+all.length+' foto). Controlla il documento; quando sei pronto, premi “Approva e prepara e-mail”.')
+ const safe=(order+'_'+address).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'');const filename=safe+'.pdf';const blob=pdf.output('blob');preparedPdfBlob=blob;preparedPdfName=filename;document.getElementById('approveEmailBtn').hidden=false;liveMsg('PDF pronto ('+all.length+' foto). Controllalo; quando sei pronto, premi “Approva e prepara e-mail” per condividerlo e aprire la bozza e-mail.')
 }
 buildLiveFields();
 const canvas=document.getElementById('canvas');
