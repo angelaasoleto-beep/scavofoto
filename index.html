@@ -127,7 +127,10 @@ button.red{background:#d93648}
 <input id="tableName" type="text" placeholder="Es. Scavo_Via_Roma_01" value="ScavoFoto">
 <p class="small">Il nome verrà usato per il file JPG salvato.</p>
 <button onclick="exportJpg()">⬇ Salva tavola JPG</button>
+<button class="secondary" onclick="sendRequestEmail()">✉️ Approva e apri e-mail</button>
+<p id="requestEmailStatus" class="small" role="status"></p>
 <button class="secondary" onclick="clearAll()">Nuovo rilievo</button>
+<p class="small">Su Samsung, il browser scarica il JPG in Download: per vederlo in Galleria, apri Archivio personale → Download e sposta/copia il file in DCIM o Pictures. Il browser non può salvarlo direttamente nella Galleria.</p>
 </section>
 </div>
 </main>
@@ -144,6 +147,26 @@ function openSection(id){
  if(id==='liveApp'&&!document.getElementById('liveDate').value)document.getElementById('liveDate').value=new Date().toISOString().slice(0,10)
 }
 function backHome(){document.getElementById('liveApp').hidden=true;document.getElementById('requestApp').hidden=true;document.getElementById('homeMenu').hidden=false}
+function sendRequestEmail(){
+ const cluster=document.getElementById('homeCluster').value;
+ const cat=document.getElementById('homeCategory').value;
+ const order=document.getElementById('orderCode').value.trim();
+ const address=document.getElementById('job').value.trim();
+ const status=document.getElementById('requestEmailStatus');
+ let to='';
+ if(!cluster){alert('Seleziona prima il cluster.');return}
+ if(cluster==='A&B'){
+  if(cat==='MILANO')to='attivazionisoleto.gpon@soletospa.it';
+  else if(cat==='HINTERLAND')to='hinterland@soletospa.it';
+  else{alert('Per A&B seleziona la categoria.');return}
+ }else if(cluster==='C&D')to='deliveryced@soletospa.it';
+ else if(cluster==='AGF')to='hinterland@soletospa.it';
+ if(!order||!address){alert('Inserisci il codice ordine e il cantiere/indirizzo prima di aprire l’e-mail.');return}
+ const subject=order+' - '+address;
+ const body='A voi le immagini con i dettagli dello scavo.\n\nSaluti';
+ status.textContent='Apro l’app e-mail. Allega manualmente il JPG scaricato, se necessario.';
+ window.location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+}
 const liveKinds=[['before','Foto prima dello scavo',true],['open','Foto scavo aperto',true],['depth','Profondità scavo (8–15 cm)',true],['finish','Fine scavo',true]];
 const livePhotos={};let extraPhotos=[];let preparedPdfBlob=null;let preparedPdfName='';
 function buildLiveFields(){const root=document.getElementById('livePhotoFields');root.innerHTML='';liveKinds.forEach(([id,label])=>{const d=document.createElement('div');d.className='info';d.innerHTML=`<strong>${label}</strong><input type="file" accept="image/*" capture="environment" id="cam_${id}"><input type="file" accept="image/*" id="gal_${id}"><button type="button" id="btncam_${id}">📷 Scatta</button><button type="button" class="secondary" id="btngal_${id}">🖼️ Galleria</button><div id="state_${id}" class="small">Foto non caricata</div>`;d.querySelector('#btncam_'+id).onclick=()=>document.getElementById('cam_'+id).click();d.querySelector('#btngal_'+id).onclick=()=>document.getElementById('gal_'+id).click();root.appendChild(d);['cam_','gal_'].forEach(pre=>document.getElementById(pre+id).addEventListener('change',e=>{if(e.target.files[0])loadLivePhoto(id,e.target.files[0],label)}))})}
@@ -218,6 +241,19 @@ async function deliverGeneratedFile(blob, filename, mimeType){
     // Non revocare subito: Safari potrebbe dover ancora aprire il file.
     setTimeout(()=>URL.revokeObjectURL(url),120000);
     return 'opened';
+  }
+  // Su Android, per i JPG, apri l'immagine in una scheda: Samsung Internet/Chrome
+  // possono così offrire il menu nativo con 'Copia immagine' e 'Scarica immagine'.
+  if (/Android/i.test(navigator.userAgent) && mimeType === 'image/jpeg') {
+    const old=document.getElementById('downloadFallback'); if(old)old.remove();
+    const box=document.createElement('div'); box.id='downloadFallback'; box.className='info';
+    box.innerHTML='<strong>IMMAGINE PRONTA</strong><span>Apri il JPG e tieni premuto sull’immagine: se il browser lo supporta, compariranno “Copia immagine” e “Scarica immagine”.</span>';
+    const a=document.createElement('a'); a.href=url; a.target='_blank'; a.rel='noopener'; a.textContent='Apri immagine JPG';
+    a.style.display='block'; a.style.padding='12px 0'; a.style.overflowWrap='anywhere';
+    box.appendChild(a); document.body.appendChild(box); box.scrollIntoView({behavior:'smooth',block:'center'});
+    // Mantieni l'URL abbastanza a lungo per la scheda appena aperta.
+    setTimeout(()=>URL.revokeObjectURL(url),120000);
+    return 'image-opened';
   }
   const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),30000);
@@ -666,7 +702,7 @@ function exportJpg(){
     const filename=safeName.toLowerCase().endsWith('.jpg')?safeName:safeName+'.jpg';
     out.toBlob(async blob=>{
       if(!blob){say('Non riesco a preparare il JPG. Riprova.');return}
-      try{const delivery=await deliverGeneratedFile(blob,filename,'image/jpeg');say(delivery==='cancelled'?'Condivisione annullata. Premi di nuovo per salvare il JPG.':'JPG pronto. Su iPhone, scegli “Salva su File” dal menu Condividi se necessario.')}catch(err){say('File creato ma non aperto: '+err.message)}
+      try{const delivery=await deliverGeneratedFile(blob,filename,'image/jpeg');say(delivery==='cancelled'?'Condivisione annullata. Premi di nuovo per salvare il JPG.':(delivery==='downloaded'?'JPG scaricato. Controlla Download.':(delivery==='image-opened'?'Apri il JPG dal link mostrato, poi tieni premuto sull’immagine per Copia immagine o Scarica immagine.':'JPG pronto. Se usi Condividi, scegli l’app di destinazione.')))}catch(err){say('File creato ma non aperto: '+err.message)}
     },'image/jpeg',0.96);
   }catch(e){
     console.error(e);
